@@ -1,0 +1,142 @@
+ELK Setup: In Windows
+----------------------
+
+Elasticsearch config for Localhost:
+===================================
+
+1. Do the 3rd step first
+
+2. Under elasticsearch-x.y.z/config/
+------------------------------------
+Maintain Configs in file: elasticsearch.yml, and write the followings lines according to your requirements
+____________________________________________________
+xpack.security.enabled: false
+
+xpack.security.enrollment.enabled: true
+
+xpack.security.http.ssl:
+  enabled: true
+  keystore.path: certs/http.p12
+
+xpack.security.transport.ssl:
+  enabled: false
+  verification_mode: certificate
+  keystore.path: certs/transport.p12
+  truststore.path: certs/transport.p12
+cluster.initial_master_nodes: ["DESKTOP-C3CBJVK"]
+
+http.host: 0.0.0.0
+-----------------------------------------------------
+
+3. Under elasticsearch-x.y.z/bin/
+----------------------------------
+Open cmd and Start batch file: .\elasticsearch.bat
+
+3. Access the elasticsearch:
+----------------------------
+Goto: http://localhost:9200/
+
+=================================================================================================================================================
+
+Logstash:
+=========
+1. Under the logstash-x.y.z\config
+-----------------------------------
+Create a file: logstash.config, and write the followings lines according to your requirements
+_____________________________________________________________________________________________________
+input {
+    file {
+		path => "C:/Users/hp/Downloads/Intg-War-With-Dash/logs/bitsflow-int-web.log"
+        type => "syslog"
+		start_position => "end"  # or end Optional, depending on your requirements
+		sincedb_path => "NUL"          # Use "NUL" in Windows to avoid sincedb file issues
+    }
+}
+
+output {
+  stdout { codec => rubydebug }
+  
+  elasticsearch {
+    hosts => ["http://localhost:9200"]
+    data_stream => true   # Enable data streams
+    data_stream_type => "logs" # Define the type, could also be "metrics" or other types
+    data_stream_dataset => "integrationlog"  # Specify a dataset name
+    data_stream_namespace => "default"  # You can change this to suit your needs
+  }
+}
+--------------------------------------------------------------------------------------------------------
+
+
+#Note for Logstash.conf: start_position Options:
+beginning:
+----------
+	Description: 
+		-> When start_position is set to "beginning", Logstash starts reading the log file from the very first line. 
+		-> This is useful when you want to ensure that all log entries are processed from the start of the file.
+		
+	Use Case:
+		-> When processing a new log file for the first time.
+		-> When you want to reprocess all logs after a pipeline restart or configuration change.
+		-> Ideal for development, testing, or when the log data is historical, and you want to process everything from scratch.
+
+end:
+----
+	Description: 
+		-> When start_position is set to "end", Logstash begins reading from the end of the file. 
+		-> It means Logstash will only process new log entries that are appended after it starts running. 
+		-> This option is helpful for tailing live log files.
+		
+	Use Case:
+		-> Useful for monitoring and processing real-time logs (like system logs or application logs).
+		-> Prevents Logstash from processing older log entries that were already handled or are not relevant.
+	
+
+2. Under logstash-x.y.z\bin: 
+----------------------------
+Open cmd and run: .\logstash.bat -f .\config\logstash.conf
+
+
+3. Access the logstash:
+-----------------------
+Goto: http://localhost:9600/
+
+
+=================================================================================================================================================
+
+Kibana:
+=======
+
+1. Under kibana-x.y.z\config:
+-----------------------------
+Uncomment the below line from kibana.yml file: 
+_________________________________________________
+elasticsearch.hosts: ["http://localhost:9200"]
+-------------------------------------------------
+Note: You can do the others configs by uncommenting the lines ...... if required.....
+elasticsearch.username: "kibana_admin"
+elasticsearch.password: "admin"
+.....
+.....
+
+
+2. kibana-x.y.z\bin:
+--------------------
+Open cmd and run the command: .\kabana.bat
+
+3. Access the kibana-dash:
+--------------------------
+Goto: http://localhost:5601/
+
+
+4. On Kibana-Dashboard:
+-----------------------
+	|-> Management -> Stack Management 
+	|			|-> Kibana -> Data Views -> Create data view
+    	|                                                   	|
+	|						    	|-> Name (Give it a name)
+	|						    	|-> Index pattern ( View from the right side & choose one which all showing as 'Data stream' )
+	|							|                      Copy (one as 'Data stream') and paste into Index pattern
+	|							|
+	|							|-> Click 'Save data view to kibana'
+	|
+	|-> Analytics -> Discover

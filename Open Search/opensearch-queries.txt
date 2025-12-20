@@ -1,0 +1,199 @@
+Youtube Playlist: https://www.youtube.com/playlist?list=PLArPZXE1kgwyQhFINDVNxlnI8ASAwyKik
+
+#################### Index Creation ####################
+# Create index
+PUT demo-index-1
+
+# Delete index
+DELETE demo-index-1
+
+# Apply Settings
+PUT demo-index-1
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  }
+}
+
+# Get mappings of an index
+GET demo-index-1/_mapping
+
+
+#################### Field types ####################
+# For more info on field-types, see data-type-os.txt
+PUT mappings-demo
+{
+  "mappings": {
+    "properties": {
+      "my_number": {
+        "type": "half_float"
+      },
+      "my_text": {
+        "type": "text"
+      },
+      "my_keyword": {
+        "type": "keyword"
+      },
+      "my_ip": {
+        "type": "ip"
+      },
+      "my_geo": {
+        "type": "geo_point"
+      },
+      "my_int_range": {
+        "type": "integer_range"
+      },
+      "my_ip_range": {
+        "type": "ip_range"
+      },
+      "my_date_range": {
+        "type": "date_range"
+      },
+      "my_float_range": {
+        "type": "float_range"
+      }
+    }
+  }
+}
+
+# Settings ranges and values
+POST mappings-demo/_doc
+{
+  "my_int_range": {
+    "gte": 30,
+    "lte": 39
+  },
+  "my_ip_range": "10.0.1.0/24",
+  "my_geo": {
+    "lat": 0,
+    "lon": 0.2
+  }
+}
+
+
+#################### Create document ####################
+# demo-index -> is an index
+# index: create as per you need
+
+POST demo-index/_doc
+{
+  "name": "xyz",
+  "address": "noida",
+  "age": 24,
+  "gender": "Male",
+  "income": 150000.56
+}
+
+# With own index
+POST demo-index/_create/1
+{
+  "name": "abc",
+  "address": "delhi",
+  "age": 25,
+  "gender": "Female",
+  "income": 150000.569
+}
+
+
+#################### Update document ####################
+PUT demo-index/_doc/1
+{
+  "name": "abc",
+  "address": "pune",
+  "age": 29,
+  "gender": "Female",
+  "income": 1500000.569
+}
+
+# Add data to existing document
+POST demo-index/_update/1
+{
+  "doc": {
+    "surname": "mno",
+    "hobby": "klm"
+  }
+}
+
+
+#################### Retrieve document ####################
+# Retrieve document (with meta data)
+GET demo-index/_doc/1
+
+# Retrieve document (without meta data)
+GET demo-index/_source/1
+
+# Retrieve document (200/404)
+HEAD demo-index/_source/1
+
+# Get all documents of all indexes
+GET demo-index/_search
+{
+  "query": {
+    "match_all": {
+    }
+  }
+}
+
+# Exclude field and set size
+GET demo-index/_search
+{
+  "<field-name>": false, 
+  "size:: <size>,
+  "query": {
+    "match_all": {
+    }
+  }
+}
+or
+GET demo-index/_search
+{
+  "<field-name>": {
+    "excludes": [
+      "<key>",
+      "<key>"
+    ]
+  }, 
+  "query": {
+    "match_all": {
+    }
+  }
+}
+
+
+#################### Advance Search in Index ####################
+# Get all documents
+GET demo-index/_search
+{
+  "query": {
+    "match_all": {
+    }
+  }
+}
+
+# Get specified size of documents
+GET demo-index/_search
+{
+  "size": 2,
+  "query": {
+    "match_all": {
+    }
+  }
+}
+
+# Apply Filter on fields
+GET demo-index/_search
+{
+  "size": 2,
+  "query": {
+    "match": {
+      "gender": "Male"
+    }
+  }
+}
+
+
+#################### Range Queries ####################
+Range queries allow you to find documents where field values are greater than, greater than or equal, less than, and less than or equal to certain values. 
+They work over numeric, IP, and even range field types.
+

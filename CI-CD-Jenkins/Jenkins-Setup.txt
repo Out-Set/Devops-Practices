@@ -1,0 +1,381 @@
+Jenkins Key Building Blocks:
+----------------------------
+pipeline: The outer wrapper for the pipeline code.
+agent: Defines where the pipeline will run.
+stages: Each stage in the pipeline (e.g., Build, Test, Deploy).
+steps: Tasks performed within a stage.
+environment: Defines environment variables.
+tools: Configures tools like Maven, Node.js.
+post: Defines actions to take after the pipeline execution (success/failure).
+input: Pauses the pipeline for manual input.
+parallel: Runs multiple stages in parallel.
+parameters: Allows user input when triggering the pipeline.
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+Jenkins-Setup in Docker:
+------------------------
+
+Pull image: docker pull jenkins/jenkins:lts-jdk17
+Create container: docker run  --name jenkins -d -p 8181:8080 -p 50000:50000 --restart=on-failure -v jenkins_home:/var/jenkins_home jenkins/jenkins:lts-jdk17
+
+User: savan
+Password: 12345
+
+Download and install Maven:
+---------------------------
+
+Enter into jenkins container terminal as root: $docker exec -it --user root jenkins bash
+Update system: $apt-get update
+Install tar: $apt-get install -y wget tar
+
+export MAVEN_VERSION=3.9.8
+export MAVEN_HOME=/opt/maven
+
+# Download Maven
+wget https://downloads.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz -P /tmp
+
+# Extract Maven
+tar -xvzf /tmp/apache-maven-${MAVEN_VERSION}-bin.tar.gz -C /opt
+mv /opt/apache-maven-${MAVEN_VERSION} ${MAVEN_HOME}
+
+# Create a symlink for easier access
+ln -s ${MAVEN_HOME}/bin/mvn /usr/bin/mvn
+
+# Validate Maven installation
+mvn --version
+
+Apache Maven 3.9.8 (36645f6c9b5079805ea5009217e36f2cffd34256)
+Maven home: /opt/maven
+Java version: 17.0.14, vendor: Eclipse Adoptium, runtime: /opt/java/openjdk
+Default locale: en, platform encoding: UTF-8
+OS name: "linux", version: "5.15.153.1-microsoft-standard-wsl2", arch: "amd64", family: "unix"
+
+
+Set 'JAVA_HOME', 'MAVEN_HOME' and 'Path to Git executable' to jenkins tools:
+----------------------------------------------------------------------------
+echo $MAVEN_HOME: /opt/maven
+echo $JAVA_HOME: /opt/java/openjdk
+which git: /usr/bin/git
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Jenkins-Setup with Jenkins-War-File:
+------------------------------------
+
+1. Download the Jenkins-War-File form: https://www.jenkins.io/download/
+2. Run: java -jar jenkins.war --httpPort=<new_port_number>
+		i.e. java -jar jenkins.war --httpPort=9090
+
+User: savan
+Password: 12345
+
+Set 'JAVA_HOME', 'MAVEN_HOME' and 'Path to Git executable' to jenkins tools:
+----------------------------------------------------------------------------
+MAVEN_HOME: C:\apache-maven-3.9.8
+JAVA_HOME: C:\Program Files\Java\jdk-17
+Path to Git executable: Need not to do (already fetched git.exe)
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Demo-Pipeline-Script:
+---------------------
+pipeline {
+    agent any
+    
+    parameters {
+        string(name: 'GIT_REPO_URL', defaultValue: 'https://github.com/Out-Set/Student-Management-System.git', description: 'GitHub repository URL')
+        string(name: 'BRANCH', defaultValue: 'main', description: 'Branch to build')
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git branch: "${params.BRANCH}", url: "${params.GIT_REPO_URL}"
+            }
+        }
+
+        stage('Clean') {
+            steps {
+                sh 'mvn clean'
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                sh 'mvn install -DskipTests'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Build completed successfully!'
+        }
+        failure {
+            echo 'Build failed!'
+        }
+    }
+}
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Mine for linux (sh):
+--------------------
+pipeline {
+    agent any
+    
+    environment {
+        GIT_URL = 'http://172.20.130.10:10880/bitsflow/apiflow.git'
+        CREDENTIALS_ID = 'apiflow-git-cred'
+    }
+ 
+    stages {
+        stage('Verify Maven Installation') {
+            steps {
+                sh 'mvn --version'
+            }
+        }
+ 
+        stage('Checkout Code') {
+            steps {
+                checkout scmGit(
+					branches: [[name: '*/dev']], 
+					extensions: [], 
+					userRemoteConfigs: [[
+						credentialsId: 'apiflow-git-cred', 
+						url: 'http://172.20.130.10:10880/bitsflow/apiflow.git'
+					]]
+				)
+            }
+        }
+ 
+        stage('Clean') {
+            steps {
+                sh 'mvn clean'
+            }
+        }
+        stage('Build') {
+            steps {
+                sh 'mvn install'
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                echo "Image Creation Started"
+                sh 'docker build -t integration-img .'
+                echo "Image creation done"
+                sh 'docker images'
+            }
+        }
+    }
+}
+
+
+Mine for Windows (batch):
+-------------------------
+pipeline {
+    agent any
+    
+    environment {
+        GIT_URL = 'http://172.20.130.10:10880/bitsflow/apiflow.git'
+        CREDENTIALS_ID = 'apiflow-git-cred'
+        JAVA_HOME = 'C:\\Program Files\\Java\\jdk-17' // Set your JDK path here
+        MAVEN_HOME = 'C:\\apache-maven-3.9.8' // Set Maven path if needed
+        PATH = "${JAVA_HOME}\\bin;${MAVEN_HOME}\\bin;${env.PATH}" // Ensure both are added to PATH
+    }
+ 
+    stages {
+        stage('Verify Maven Installation') {
+            steps {
+                bat 'mvn --version'
+            }
+        }
+ 
+        stage('Checkout Code') {
+            steps {
+                checkout scmGit(
+                    branches: [[name: '*/dev']],
+                    extensions: [],
+                    userRemoteConfigs: [[
+                        credentialsId: 'apiflow-git-cred', 
+                        url: 'http://172.20.130.10:10880/bitsflow/apiflow.git'
+                    ]]
+                )
+            }
+        }
+ 
+        stage('Clean') {
+            steps {
+                bat 'mvn clean'
+            }
+        }
+        stage('Build') {
+            steps {
+                bat 'mvn install'
+            }
+        }
+        
+        stage('Stop Existing Docker Container') {
+            steps {
+                bat 'docker stop integration-img'
+            }
+        }
+        stage('Remove Existing Docker Container') {
+            steps {
+                bat 'docker rm -f integration-img'
+            }
+        }
+        stage('Remove Existing Docker Image') {
+            steps {
+                bat 'docker rmi -f integration-img'
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                echo "Image Creation Started"
+                bat 'docker build -t integration-img .'
+                echo "Image creation done"
+                bat 'docker images'
+            }
+        }
+        stage('Run Docker Container') {
+            steps {
+                echo "Starting Docker container"
+                bat 'docker run --name integration-img -v C:/Users/hp/Documents/Integration-Container-Logs/logs:/app/logs -e spring.datasource.url=jdbc:postgresql://172.16.130.234:5432/integration -e spring.datasource.username=postgres -e spring.datasource.password=12345 -e system.load.db.properties=YES -p 8081:8081 -d integration-img'
+                echo "Docker container started"
+            }
+        }
+    }
+}
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Vinay:
+------
+pipeline {
+    agent any
+    parameters {
+        string(name: 'TAG', description: 'Enter the Unique Tag For Integration Image')
+    }
+    environment {
+        // GIT_URL = 'https://github.com/BitsflowITAdmin/apiflow.git'
+        // CREDENTIALS_ID = '2f90b9a1-9d3c-42ba-b671-fa68a9dc0836'
+        M2_HOME = '/opt/apache-maven-3.9.8'
+    }
+ 
+    stages {
+        stage('Check Tag Uniqueness') {
+            steps {
+                script {
+                    echo "Checking if the tag '${params.TAG}' is unique in the repository '${env.ECR_REPO}'"
+                    def result = sh(script: "aws ecr list-images --repository-name finfinity_apigateway --region ${env.AWS_REGION} --query 'imageIds[*].imageTag' --output text", returnStdout: true).trim()
+                    if (result.contains(params.TAG)) {
+                        error "The tag '${params.TAG}' already exists in the repository '${env.ECR_REPO}'. Please use a unique tag."
+                    } else {
+                        echo "The tag '${params.TAG}' is unique. Proceeding with the build."
+                    }
+                }
+            }
+        }
+        stage('Verify Maven Installation') {
+            steps {
+                sh 'mvn -version'
+            }
+        }
+ 
+        stage('Checkout Code') {
+            steps {
+                // git branch: "${Git_Branch}", url: "${env.GIT_URL}", credentialsId: "${env.CREDENTIALS_ID}"
+                checkout scmGit(branches: [[name: '*/uat']], extensions: [], userRemoteConfigs: [[credentialsId: '2f90b9a1-9d3c-42ba-b671-fa68a9dc0836', url: 'https://github.com/BitsflowITAdmin/apiflow.git']])
+            }
+        }
+ 
+        stage('Clean') {
+            steps {
+                sh 'mvn clean'
+            }
+        }
+        stage('Build') {
+            steps {
+                sh 'mvn install'
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                echo "Image Creation Started"
+                sh 'docker build -t integration-img .'
+                echo "Image creation done"
+                sh 'docker images'
+            }
+        }
+        stage('Push Docker Image to AWS ECR') {
+            steps {
+                script {
+                    sh "aws ecr get-login-password --region ${env.AWS_REGION} | docker login --username AWS --password-stdin ${env.ECR_REPO}"
+                    echo "Tagging the Docker image with the tag: ${params.TAG}"
+                    sh "docker tag integration-img:latest ${env.ECR_REPO}:${params.TAG}"
+                    echo "Pushing the Docker image to ECR with the tag: ${params.TAG}"
+                    sh "docker push ${env.ECR_REPO}:${params.TAG}"
+                }
+            }
+        }
+        stage('Update Integration Service') {
+            steps {
+                script {
+                    // Set environment variables for the curl command
+                    def DUPLO_HOST = env.DUPLO_HOST
+                    def DUPLO_UAT_TOKEN = env.DUPLO_UAT_TOKEN
+                    def DUPLO_UAT_TENANT_ID = env.DUPLO_UAT_TENANT_ID
+                    def service_name = env.SERVICE_NAME
+                    def image_name = "${env.ECR_REPO}:${params.TAG}"
+ 
+                    sh """#!/bin/bash
+                    export duplo_host=${DUPLO_HOST}
+                    export duplo_uat_token=${DUPLO_UAT_TOKEN}
+                    export UAT_PROD_TENANT_ID=${DUPLO_UAT_TENANT_ID}
+                    export service_name=${service_name}
+                    export image_name=${image_name}
+ 
+                    curl -Ssf -H 'Content-type: application/json' \\
+                        -H "Authorization: Bearer ${DUPLO_UAT_TOKEN}" -XPOST \\
+                        "${DUPLO_HOST}/subscriptions/${DUPLO_UAT_TENANT_ID}/ReplicationControllerChange" \\
+                        -d '{
+                            "Name": "${service_name}",
+                            "Image": "${image_name}"
+                        }'
+                    """
+                }
+            }
+        }
+    }
+}
+
+
+
+Steps:
+------
+1. git pull
+2. mvn clean
+3. mvn install
+4. docker stop integration-img
+5. docker rm -f integration-img
+6. docker rmi -f integration-img
+7. docker build -t integration-img .
+8. docker run --name integration-img -v C:/Users/hp/Documents/Integration-Container-Logs/logs:/app/logs -e spring.datasource.url=jdbc:postgresql://172.16.130.234:5432/integration -e spring.datasource.username=postgres -e spring.datasource.password=12345 -e system.load.db.properties=YES -p 8081:8081 -d integration-img
+
+
+Reading last xxx line of file content: 
+--------------------------------------
+docker logs --tail 100 <image-name/image-id>: docker logs --tail 100 integration-image
+tail -n 100 <file-name>: tail -n 100 bitsflow-int-web.log
+

@@ -1,0 +1,59 @@
+Git Important Commands
+--------------------------
+
+Connect to a remote git repository
+-----------------------------------
+
+First
+-------
+1. git add .
+2. git commit -m "message"
+
+3. git remote add origin <repo url>
+
+Creating a Branch
+--------------------
+4. git branch -M <branch-name>
+i.e. git branch -M main
+
+Pushing the code
+------------------
+5. git push -u origin <branch-name>
+i.e. git push -u origin main
+
+
+For Example
+--------------
+git add .
+git commit -m "initial commit"
+git remote add origin https://github.com/Out-Set/Learn_Recursion.git
+git branch -M main
+git push -u origin main
+
+
+Push forcefull, if giving some errors
+--------------------------------------
+git push --force origin main
+
+
+Clone particular branch code of github
+------------------------------------------
+git clone -b branch_name repository_url
+
+i.e. git clone -b main https://github.com/username/repository.git
+
+
+Add Configurations
+--------------------
+
+Check-Config: git config --list
+
+git config --global user.name <Github-UserName>
+
+git config --global user.email <Email-Linked-With-Github>
+
+
+
+Git Pull
+-----------
+Pull the latest changes of remote repi to local repo: git pull

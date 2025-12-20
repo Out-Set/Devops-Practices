@@ -1,0 +1,8 @@
+# Allows access from any network interface
+server.host: "0.0.0.0"
+
+# URL of your Elasticsearch instance
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+
+
+

@@ -1,0 +1,41 @@
+Redis Setup Steps:
+==================
+
+1.Pull Redis Image From Docker-Hub:
+----------------------------------- 
+	docker pull redis
+
+
+2.Create Container of Redis: 
+----------------------------
+	With Password:
+	--------------
+		docker run --name redisCache -p 6379:6379 -d redis redis-server --requirepass <Your Password>
+		
+	Without Password:
+	-----------------
+		docker run --name redisCache -p 6379:6379 -d redis redis-server
+
+3.Connect Redis-cli:
+--------------------
+	docker exec -it <Redis Container Name> redis-cli
+	
+	127.0.0.1:6379> AUTH <Your Password>
+	OK
+	
+	127.0.0.1:6379> PING
+	PONG
+	
+	127.0.0.1:6379> SET mykey "Hello, Redis!"
+	OK
+	
+	127.0.0.1:6379> GET mykey
+	"Hello, Redis!"
+	
+	127.0.0.1:6379> exit
+	
+
+#Redis Configs
+spring.data.redis.host = localhost
+spring.data.redis.port = 6379
+spring.redis.password = 12345

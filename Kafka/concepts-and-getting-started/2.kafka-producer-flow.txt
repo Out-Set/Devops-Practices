@@ -1,0 +1,126 @@
+
+1. Basic Flow of a Kafka Producer:
+==================================
+When a producer sends data, It connects to the Kafka cluster (specifically to a bootstrap broker).
+The producer sends a record that includes:
+Topic name
+Key (Optional)
+Value (the actual message)
+Partition number (Optional)
+
+The Kafka producer client library determines which partition to send the record to.
+The producer sends the data to the leader broker of that partition.
+The broker writes it to disk and optionally replicates it to follower brokers (based on the replication factor).
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+
+2. How Partition Selection Works:
+=================================
+There are 3 ways a producer decides the partition:
+
+Case 1: Partition explicitly specified:
+---------------------------------------
+producer.send(new ProducerRecord<>("my-topic", 2, "key1", "message1"));
+Here, you’ve explicitly said “use partition 2”, so Kafka directly sends it to partition 2.
+
+Case 2: Key is provided, partition is not:
+------------------------------------------
+Java-Code: producer.send(new ProducerRecord<>("my-topic", "userId123", "purchase info"));
+
+Producer-Console: ./bin/kafka-console-producer.sh --topic mypqr --bootstrap-server localhost:9092 --property parse.key=true --property key.separator=:
+>userId123:abc
+>userId456:xyz
+>userId789:pqr
+
+Note: If you have set this parse.key=true property then you should must send key with specified seperator.
+>hello
+org.apache.kafka.common.KafkaException: No key found on line 1: hello
+	at kafka.tools.ConsoleProducer$LineMessageReader.readMessage(ConsoleProducer.scala:292)
+	at kafka.tools.ConsoleProducer$.main(ConsoleProducer.scala:51)
+	at kafka.tools.ConsoleProducer.main(ConsoleProducer.scala)
+
+Consumer-Console: ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic mypqr --property print.partition=true --property print.key=true --property print.value=true --from-beginning
+Partition:1	userId123	purchase-info
+Partition:2	user456		no-buy
+Partition:2	user789		groceries-buy
+
+Kafka uses a partitioner (by default DefaultPartitioner), that Applies a hash function to the key. Maps the hash to one of the available partitions.
+
+Example (simplified):
+partition = hash("userId123") % number_of_partitions
+Result: All messages with the same key always go to the same partition, ensuring order for that key.
+
+Case 3: No key and no partition:
+--------------------------------
+Java-Code: producer.send(new ProducerRecord<>("my-topic", "message without key"));
+
+Producer-Console: ./bin/kafka-console-producer.sh --topic mypqr --bootstrap-server localhost:9092
+>1
+>2
+>3
+
+Consumer-Console: ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic mypqr --property print.partition=true --property print.key=true --property print.value=true --from-beginning
+Partition:0	null	1
+Partition:0	null	2
+Partition:2	null	3
+
+Kafka uses a round-robin strategy (or sticky partitioning).
+It batches records to one partition for some time or till certain batch-size (to improve throughput), then switches to another partition. This gives load balancing across partitions.
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+
+3. Data Transmission Internals:
+===============================
+Producer buffers records in memory (RecordAccumulator).
+They’re batched per topic-partition.
+Once batch is full or timeout reached, it’s sent to the leader broker of that partition.
+Broker acknowledges the message (based on acknowledges setting: 0, 1, or all).
+
+Example Visualization
+Say a topic has 3 partitions: 0, 1, 2
+Key		Hash(key)	Partition (hash % 3)
+-----------------------------------------------------
+"userA"		23342		23342 % 3 = 2
+"userB"		92123		92123 % 3 = 0
+"userC"		18211		18211 % 3 = 1
+"userA"		23342		23342 % 3 = 2
+
+All messages for userA go to partition 2, maintaining order for that key.
+
+Summary
+Scenario		How Partition is Chosen		Ordering Guarantee
+---------------------------------------------------------------------------
+Partition specified	Explicit by user		Yes
+Key provided		Hash(key) % numPartitions	Yes (per key)
+No key			Round-robin or sticky		No (unordered)
+
+
+Scenario	Console Command							Partitioning Behavior
+-----------------------------------------------------------------------------------------------------
+No key		kafka-console-producer.sh --topic demo-topic ...		Round-robin / Sticky
+With key	Add --property parse.key=true --property key.separator=:	Hash(key) % numPartitions
+
+key.separator:
+==============
+Can be any character or string — here are the most common ones:
+Separator	Example Input	Key	Value
+---------------------------------------------
+:		user1:Hello	user1	Hello
+,		user1,Hello	user1	Hello
+=		user1=Hello	user1	Hello
+->		user1->Hello	user1	Hello
+::		user1::Hello	user1	Hello
+␣ (space)	user1 Hello	user1	Hello
+
+Notes and Best Practices
+1. Avoid using characters that can appear in your message body (like : or =) unless you’re sure they won’t cause confusion.
+2. You can even use multi-character separators, e.g.:
+    --property key.separator=" -> "
+	Then input:
+	userA -> Message for you
+
+3. If the separator is not found in the message line, Kafka treats the entire line as the value, and key will be null.
+
+
+
+

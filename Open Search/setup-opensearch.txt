@@ -1,0 +1,246 @@
+Linux settings:
+===============
+For a Linux environment, run the following commands to disable memory paging and swapping performance on the host to improve performance.
+sudo swapoff -a
+
+Increase the number of memory maps available to OpenSearch.
+# Edit the sysctl config file
+sudo vi /etc/sysctl.conf
+
+# Add a line to define the desired value or change the value if the key exists, and then save your changes.
+vm.max_map_count=262144
+
+# Reload the kernel parameters using sysctl
+sudo sysctl -p
+
+# Verify that the change was applied by checking the value
+cat /proc/sys/vm/max_map_count
+
+
+Windows settings:
+=================
+For Windows workloads using WSL through Docker Desktop, run the following commands in a terminal to set the vm.max_map_count:
+
+wsl -d docker-desktop
+sysctl -w vm.max_map_count=262144
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+docker network create os-net
+
+OPENSEARCH:
+===========
+Create opensearch container:
+----------------------------
+docker run -d --name opensearch-node -p 9200:9200 -p 9600:9600 
+--network os-net -e "discovery.type=single-node" -e "OPENSEARCH_INITIAL_ADMIN_PASSWORD=@qazxsW$345#" 
+opensearchproject/opensearch:latest
+
+Check: curl https://localhost:9200 -ku admin:"@qazxsW$345#"
+
+OPENSEARCH Dashboard:
+=====================
+In powershell to know admin password:
+-------------------------------------
+docker inspect opensearch-node | Select-String "OPENSEARCH_INITIAL_ADMIN_PASSWORD"
+
+opensearch-dashboard.yml:
+-------------------------
+server.name: opensearch_dashboards
+server.host: "0.0.0.0"
+server.customResponseHeaders : { "Access-Control-Allow-Credentials" : "true" }
+    
+# Disabling HTTPS on OpenSearch Dashboards
+server.ssl.enabled: false
+    
+opensearch.hosts: ["https://opensearch-node:9200"] # Using the opensearch container name
+    
+opensearch.ssl.verificationMode: none
+opensearch.username: kibanaserver
+opensearch.password: kibanaserver
+opensearch.requestHeadersWhitelist: ["securitytenant","Authorization"]
+    
+# Multitenancy
+opensearch_security.multitenancy.enabled: true
+opensearch_security.multitenancy.tenants.preferred: ["Private", "Global"]
+opensearch_security.readonly_mode.roles: ["kibana_read_only"]
+
+Create os-dashboard container:
+------------------------------
+docker run -d --name opensearch-dashboard --network os-net -p 5601:5601 
+-v C:/Users/Admin/Documents/opensearch/opensearch_dashboards.yml:/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml 
+opensearchproject/opensearch-dashboards:latest
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+LOGSTASH:
+=========
+1. logstash setup to pull data from database then push into opensearch
+
+# Paths of logstash.yml, pipelines.yml and logstash.conf in logstash container
+# /usr/share/logstash/config/logstash.yml
+# /usr/share/logstash/config/pipelines.yml
+# /usr/share/logstash/pipeline/logstash.conf
+
+Dockerfile:
+-----------
+# Logstash with opensearch-plugin
+FROM docker.elastic.co/logstash/logstash:8.15.1
+RUN bin/logstash-plugin install --no-verify logstash-output-opensearch
+RUN bin/logstash-plugin install --no-verify logstash-input-opensearch
+
+logstash.yml:
+-------------
+http.host: "0.0.0.0"  # Allows access from any network interface
+http.port: 9600       # Default API port
+
+logstash.conf:
+--------------
+input {
+  jdbc {
+    jdbc_driver_library => "/db-lib/postgresql-42.7.3.jar"
+    jdbc_driver_class => "org.postgresql.Driver"
+    jdbc_connection_string => "jdbc:postgresql://host.docker.internal:5432/aims"
+    jdbc_user => "postgres"
+    jdbc_password => "12345"
+    statement => "select code, host, name, order_number, test_name, value, value_type, patient_id from test_detail"
+    schedule => "0/30 * * * * *"  # run every minute
+  }
+}
+
+output {
+  opensearch {
+    hosts => ["https://opensearch-node:9200"]
+    index => "lab_tests"
+    user => "admin"
+    password => "@qazxsW$345#"
+    ssl => true
+    ssl_certificate_verification => false
+	manage_template => false
+  }
+}
+
+Create logstash container:
+--------------------------
+With Database:
+docker run --name logstash --net os-net 
+-v C:/Users/Admin/Documents/opensearch/logstash.conf:/usr/share/logstash/pipeline/logstash.conf 
+-v C:/Users/Admin/Documents/opensearch/logstash.yml:/usr/share/logstash/config/logstash.yml 
+-v "C:/Users/Admin/Documents/opensearch/db-lib:/db-lib" 
+-p 5044:5044 -p 9700:9600 -d logstash-os
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+2. logstash setup to pull data from kafka then push into opensearch
+Start-Kafka:
+------------
+For windows:
+Open path in the cmd: kafka_2.12-2.8.1\bin\windows>
+1. Start zookeeper server: zookeeper-server-start.bat ..\..\config\zookeeper.properties
+2. Start kafka server: kafka-server-start.bat ..\..\config\server.properties
+3. Create a topic: kafka-topics.bat --create --topic <topic-name> --bootstrap-server localhost:9092
+4. Start producer console: kafka-console-producer.bat --topic <topic-name> --bootstrap-server localhost:9092
+5. Start consumer console: kafka-console-consumer.bat --topic <topic-name> --bootstrap-server localhost:9092
+
+For linux:
+Open path in the cmd: kafka_2.12-2.8.1\bin>
+1. Start zookeeper server: zookeeper-server-start.sh ../config/zookeeper.properties
+2. Start kafka server: kafka-server-start.sh ../config/server.properties
+3. Create a topic: kafka-topics.sh --create --topic <topic-name> --bootstrap-server localhost:9092
+4. Start producer console: kafka-console-producer.sh --topic <topic-name> --bootstrap-server localhost:9092
+5. Start consumer console: kafka-console-consumer.sh --topic <topic-name> --bootstrap-server localhost:9092
+
+Since kafka is running on machine and logstash in docker
+1. ping host.docker.internal: Pinging host.docker.internal [172.16.130.145] with 32 bytes of data
+	copy the ip: 172.16.130.145 (this)
+2. Edit the host-file in windows as admin: C:\Windows\System32\drivers\etc\hosts
+3. In windows goto settings->system->about and copy device-name: DESKTOP-8QQH0C2
+4. Add the line in host-file: 172.16.130.145   DESKTOP-8QQH0C2
+5. Save and restart docker
+6. ping DESKTOP-8QQH0C2: PING DESKTOP-8QQH0C2 (172.16.130.145): 56 data bytes
+
+logstash.conf:
+--------------
+input {
+  kafka {
+    bootstrap_servers => "<kafka-running-machine-ip>:9092"
+    topics => ["lab"]
+    group_id => "AIMS"
+    codec => json
+  }
+}
+
+output {
+  opensearch {
+    hosts => ["https://opensearch-node:9200"]
+    index => "lab_tests"
+    user => "admin"
+    password => "@qazxsW$345#"
+    ssl => true
+    ssl_certificate_verification => false
+    manage_template => false
+  }
+}
+
+Create logstash container:
+--------------------------
+With Kafka:
+docker run --name logstash --net os-net 
+--add-host <device-name>:<kafka-running-machine-ip> 
+-v C:/Users/Admin/Documents/opensearch/logstash.conf:/usr/share/logstash/pipeline/logstash.conf 
+-v C:/Users/Admin/Documents/opensearch/logstash.yml:/usr/share/logstash/config/logstash.yml 
+-p 5044:5044 -p 9700:9600 -d logstash-os
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Read from both kafka and database:
+==================================
+input {
+  # --- Read from PostgreSQL ---
+  jdbc {
+    jdbc_driver_library => "/db-lib/postgresql-42.7.3.jar"
+    jdbc_driver_class => "org.postgresql.Driver"
+    jdbc_connection_string => "jdbc:postgresql://host.docker.internal:5432/aims"
+    jdbc_user => "postgres"
+    jdbc_password => "12345"
+    statement => "select code, host, name, order_number, test_name, value, value_type, patient_id from test_detail"
+    schedule => "0/30 * * * * *"  # every 30 seconds
+    type => "jdbc_source"
+  }
+
+  # --- Read from Kafka ---
+  kafka {
+    bootstrap_servers => "<kafka-running-machine-ip>:9092"
+    topics => ["lab"]
+    group_id => "AIMS"
+    codec => json
+    type => "kafka_source"
+  }
+}
+
+filter {
+  # Optional: add source metadata field to distinguish events
+  mutate {
+    add_field => { "source_type" => "%{type}" }
+  }
+}
+
+output {
+  # --- Send all data to OpenSearch ---
+  opensearch {
+    hosts => ["https://opensearch-node:9200"]
+    index => "lab_tests"
+    user => "admin"
+    password => "@qazxsW$345#"
+    ssl => true
+    ssl_certificate_verification => false
+    manage_template => false
+  }
+
+  # Optional: debug to stdout
+  stdout {
+    codec => rubydebug
+  }
+}
+
+

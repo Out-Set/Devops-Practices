@@ -1,0 +1,97 @@
+Dynamic-Mapping:
+================
+In OpenSearch, dynamic index mappings are the automatic way the system determines and assigns field types when you index new documents that contain previously unseen fields.
+They let you start indexing documents without explicitly defining a mapping — OpenSearch will infer the field types for you.
+
+When you index a document:
+POST my-index/_doc
+{
+  "user": "Alice",
+  "age": 30,
+  "verified": true
+}
+
+If no explicit mapping exists, OpenSearch will dynamically create one like:
+"mappings": {
+  "properties": {
+    "user":    { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } } },
+    "age":     { "type": "long" },
+    "verified": { "type": "boolean" }
+  }
+}
+
+
+This happens on the fly, so you don’t have to define mappings in advance.
+
+Dynamic Mapping Rules:
+----------------------
+Field Type (in JSON)			Inferred Mapping Type
+"text" (string)					text + subfield keyword
+123 (integer)					long
+true / false					boolean
+12.34 (float)					float
+"2025-11-03" (date string)		date (if format matches date pattern)
+"192.168.1.1"					ip
+{ ... } (object)				object or nested (depending on settings)
+
+
+Controlling Dynamic Mappings:
+-----------------------------
+You can control how OpenSearch behaves with the dynamic setting in your mappings.
+
+Options:
+--------
+Value					Behavior
+"true" (default)		New fields are added dynamically.
+"false"					New fields are ignored (data is indexed but not searchable).
+"strict"				Rejects documents with unknown fields (throws an error).
+
+Example:
+PUT my-index
+{
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "name": { "type": "text" }
+    }
+  }
+}
+
+If you try to index a document with an unexpected field:
+POST my-index/_doc
+{
+  "name": "Alice",
+  "age": 25
+}
+OpenSearch will reject it because "age" isn’t defined.
+
+
+Dynamic Templates:
+------------------
+If you want finer control over how new fields are mapped, use dynamic templates.
+They let you define rules for mapping new fields by name or data type.
+
+Example:
+PUT logs
+{
+  "mappings": {
+    "dynamic_templates": [
+      {
+        "strings_as_keywords": {
+          "match_mapping_type": "string",
+          "mapping": { "type": "keyword" }
+        }
+      }
+    ]
+  }
+}
+Now, any new string field (like "status": "ok") will automatically become a keyword, not text.
+
+Concept	Description:
+--------------------
+Dynamic mappings	Auto-assign field types when new fields appear.
+dynamic flag		Controls whether new fields are added, ignored, or rejected.
+Dynamic templates	Custom rules to control how automatic mapping works.
+
+
+

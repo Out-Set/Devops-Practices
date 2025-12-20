@@ -1,0 +1,56 @@
+
+Install Jenkins:
+----------------
+1. docker pull jenkins/jenkins (https://hub.docker.com/r/jenkins/jenkins)
+2. docker run -p 8080:8080 -p 50000:50000 --restart=on-failure -v jenkins_home:/var/jenkins_home jenkins/jenkins (https://github.com/jenkinsci/docker/blob/master/README.md)
+3. Get the admin password from terminal.
+4. Enter the admin password: http://localhost:8080
+5. Choose form the options ( for beginners: install suggested plugin )
+6. When plugin downloaded process is completed, a form will open fill the details then save and finish -> save and finish -> start using jenkins
+7. Completed the installation process.
+
+Note: jenkins user -> root and password -> root
+
+Note: Maven and Java should be installed
+
+Install Maven:
+--------------
+1. sudo apt install maven
+2. mvn --version
+   Apache Maven 3.8.7
+   Maven home: /usr/share/maven
+   Java version: 21.0.4, vendor: Oracle Corporation, runtime: /usr/lib/jvm/jdk-21.0.4-oracle-x64
+   Default locale: en_US, platform encoding: UTF-8
+   OS name: "linux", version: "6.8.0-49-generic", arch: "amd64", family: "unix"
+
+JAVA_HOME and MAVEN_HOME:
+-------------------------
+$ mvn --version
+   Apache Maven 3.8.7
+   Maven home: /usr/share/maven
+   Java version: 21.0.4, vendor: Oracle Corporation, runtime: /usr/lib/jvm/jdk-21.0.4-oracle-x64
+   Default locale: en_US, platform encoding: UTF-8
+   OS name: "linux", version: "6.8.0-49-generic", arch: "amd64", family: "unix"
+   
+JAVA_HOME: /usr/lib/jvm/jdk-21.0.4-oracle-x64
+MAVEN_HOME: /usr/share/maven
+	$ export MAVEN_HOME=/usr/share/maven
+	$ export PATH=$MAVEN_HOME/bin:$PATH
+	$ echo $MAVEN_HOME
+
+
+Install plugins:
+----------------
+Dashboard -> Manage Jenkins -> Plugins -> Available plugins
+1. Maven Integration
+2. Deploy to container
+
+
+Add JAVA_HOME and MAVEN_HOME:
+-----------------------------
+Dashboard -> Manage Jenkins -> Tools
+
+Create a job:
+-------------
+Dashboard -> New item
+

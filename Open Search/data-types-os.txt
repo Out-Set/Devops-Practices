@@ -1,0 +1,59 @@
+In OpenSearch, field types define how data in each field of a document is stored, indexed, and searched. 
+Choosing the correct field type is critical for performance and accuracy.
+Here’s a breakdown of the main field types in OpenSearch, grouped by category:
+
+Core Field Types:
+-----------------
+Type			Description														Example
+text			Analyzed field for full-text search (tokenized).				"message": "Quick brown fox"
+keyword			Not analyzed; exact matches and aggregations.					"status": "SUCCESS"
+integer			32-bit integer number.											42
+long			64-bit integer number.											1234567890123
+short			16-bit integer number.											120
+byte			8-bit integer number.											-10
+double			64-bit floating-point number.									3.14159
+float			32-bit floating-point number.									1.23
+half_float		16-bit floating-point number (less precision).					0.123
+scaled_float	Floating-point with a scaling factor (useful for currency).		{ "type": "scaled_float", "scaling_factor": 100 }
+boolean			True/false values.												true
+binary			Base64-encoded binary data.										"aGVsbG8="
+
+
+Date and Time Types:
+--------------------
+Type			Description														Example
+date			Stores date/time values (supports multiple formats).			"2025-11-03T12:00:00Z"
+
+
+Geospatial Types:
+-----------------
+Type			Description														Example
+geo_point		Latitude-longitude point.										"location": "41.12,-71.34"
+geo_shape		Complex geographical shapes (polygons, lines, etc.).			Polygon or multipolygon JSON
+
+
+Range Field Types:
+------------------
+Type			Description														Example
+integer_range	Range of integer values.										{ "gte": 1, "lte": 5 }
+float_range		Range of float values.											{ "gte": 0.5, "lte": 1.0 }
+long_range		Range of long values.											{ "gte": 1000, "lte": 5000 }
+double_range	Range of double values.										 	{ "gte": 0.01, "lte": 10.0 }
+date_range		Range of date values.											{ "gte": "2024-01-01", "lte": "2025-01-01" }
+
+
+Special and Advanced Field Types:
+---------------------------------
+Type			Description														Example
+object			Nested key-value pairs (not separately indexed).				{ "user": { "name": "Alice" } }
+nested			Array of objects that are indexed separately 					{ "comments": [{ "user": "Bob", "text": "hi" }] }
+				for accurate querying.
+ip				IPv4 or IPv6 address.											"192.168.1.1"
+completion		Used for autocomplete or suggestions.							{ "type": "completion" }
+percolator		Stores queries for percolate query matching.					{ "type": "percolator" }
+flattened		Stores arbitrary key-value pairs without deep nesting.			{ "type": "flattened" }
+alias			Maps to another field.											{ "type": "alias", "path": "actual_field" }
+version			Special type for versioning.									Used internally.
+join			Defines parent/child relationships between documents.			{ "type": "join", "relations": { "parent": "child" } }
+
+

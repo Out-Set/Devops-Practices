@@ -1,0 +1,81 @@
+*Elastic Stack Playlist: https://www.youtube.com/watch?v=bcsII2dGnDU&list=PLA3GkZPtsafYd5m2BXmkL9pjsBKy0FQ2X
+
+Install apm-server:
+-------------------
+
+1. docker pull docker.elastic.co/apm/apm-server:9.0.0
+2. https://raw.githubusercontent.com/elastic/apm-server/master/apm-server.docker.yml
+
+3. docker run --name apm-server --net elastic -d -p 8200:8200 docker.elastic.co/apm/apm-server:9.0.0
+
+4.Copy the file from the container to the host-machine
+	$ docker cp b03edb31e25e:/usr/share/apm-server/apm-server.yml C:\Users\hp\Desktop\apm-server.yml
+	
+	Do the below minimal config in apm-server.yml
+	---------------------------------------------
+		apm-server:
+			host: "0.0.0.0:8200"
+  
+		output.elasticsearch:
+			hosts: ["elasticsearch:9200"]
+			username: "elastic"
+			password: "123456"
+
+5.Copy the modified file back to the container
+	$ docker cp C:\Users\hp\Desktop\apm-server.yml b03edb31e25e:/usr/share/apm-server/apm-server.yml
+	
+	           OR
+			   
+6. Get into the apm-server container:
+	FROM docker.elastic.co/apm/apm-server:9.0.0
+	COPY --chmod=0644 --chown=1000:1000 C:\Users\hp\Documents\ELK-in-Docker\apm-server.yml /usr/share/apm-server/apm-server.yml
+
+7. Do the config manually by going to the the location: /usr/share/apm-server and edit apm-server.yml with the below minimal config
+		apm-server:
+			host: "localhost:8200"
+  
+		output.elasticsearch:
+			hosts: ["localhost:9200"]
+			username: "elastic"
+			password: "123456"
+
+8. http://localhost:8200
+	Verify the setup: "publish_ready": true,
+	{
+		"build_date": "2025-03-25T15:32:57Z",
+		"build_sha": "8a80b42fe664d49038342d721bb6bc4b25f52e47",
+		"publish_ready": true,
+		"version": "9.0.0"
+	}
+
+
+Setup apm-agent in Spring-Boot:
+-------------------------------
+https://www.elastic.co/docs/reference/apm/agents/java/setup-attach-api
+
+<dependency>
+    <groupId>co.elastic.apm</groupId>
+    <artifactId>apm-agent-attach</artifactId>
+    <version>1.54.0</version>
+</dependency>
+
+
+import co.elastic.apm.attach.ElasticApmAttacher;
+import org.springframework.boot.SpringApplication;
+
+@SpringBootApplication
+public class MyApplication {
+    public static void main(String[] args) {
+        ElasticApmAttacher.attach();
+        SpringApplication.run(MyApplication.class, args);
+    }
+}
+
+During application start:
+-------------------------
+java -jar 
+-Delastic.apm.service_name=backend-integration
+-Delastic.apm.server_url=http://localhost:8200
+-Delastic.apm.application_packages=com.myapp
+-Delastic.apm.environment=dev
+app.war

@@ -1,0 +1,2 @@
+http.host: "0.0.0.0"  # Allows access from any network interface
+http.port: 9600       # Default API port

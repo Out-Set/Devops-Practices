@@ -1,0 +1,16 @@
+# Enable security features
+xpack.security.enabled: false
+
+# Enable enrollment (for TLS and secure setup if needed)
+xpack.security.enrollment.enabled: true
+
+# Enable SSL for HTTP and transport (required for Fleet)
+xpack.security.http.ssl.enabled: false  # Optional: Keep false if SSL is not needed for HTTP
+xpack.security.transport.ssl.enabled: false  # Optional: Keep false for testing, set true in production
+
+# Cluster configuration
+discovery.type: single-node  # Set discovery type to single-node
+
+# Allow access from outside
+http.host: 0.0.0.0  # Binds Elasticsearch to all network interfaces
+

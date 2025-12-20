@@ -1,0 +1,117 @@
+Kafka:
+------
+Kafka 0.8 -> 2.x :: ZooKeeper required
+Kafka 3.0 -> 3.3 :: ZooKeeper required (KRaft optional, NOT production ready)
+Kafka 3.4 -> 3.9 :: Both ZooKeeper and KRaft supported (KRaft stable)
+Kafka 4.0+ :: ZooKeeper removed - KRaft mandatory
+
+Documentation: https://kafka.apache.org/documentation/
+______________________
+| kAFKA - Before 4.0 |
+----------------------
+
+See image: kafka-ecosystem.png
+
+Kafka-Ecosystem:
+================
+1. Create a folder (i.e. /config/ecosystem) in order to keep multiple server.prperties file to start with multiple brokers.
+2. Keep server-1.prperties, server-2.prperties and server-3.prperties file.
+
+server-1.prperties:
+------------------
+broker.id=1
+listeners=PLAINTEXT://:9092
+log.dirs=/tmp/kafka-logs-01
+
+server-2.prperties:
+------------------
+broker.id=2
+listeners=PLAINTEXT://:9093
+log.dirs=/tmp/kafka-logs-02
+
+server-3.prperties:
+------------------
+broker.id=3
+listeners=PLAINTEXT://:9094
+log.dirs=/tmp/kafka-logs-03
+
+Starting kafka-servers:
+-----------------------
+1. ./bin/kafka-server-start.sh ./config/ecosystem/server-1.properties
+2. ./bin/kafka-server-start.sh ./config/ecosystem/server-2.properties
+3. ./bin/kafka-server-start.sh ./config/ecosystem/server-3.properties
+
+
+Now create a topic: ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic test --partitions 3
+Describe the topic: ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --topic test --describe
+Topic: test	TopicId: YDgPhA2FRJqJgPiIhDrH_g	PartitionCount: 3	ReplicationFactor: 1	Configs: segment.bytes=1073741824
+	Topic: test	Partition: 0	Leader: 1	Replicas: 1	Isr: 1
+	Topic: test	Partition: 1	Leader: 0	Replicas: 0	Isr: 0
+	Topic: test	Partition: 2	Leader: 2	Replicas: 2	Isr: 2
+
+Now open temp dir & you will see: $xdg-open /tmp
+tmp/kafka-logs-01/test-1
+tmp/kafka-logs-02/test-0
+tmp/kafka-logs-03/test-2
+Note: The partitions test-1/test-0/test-2 may be in different kafka-logs-01/kafka-logs-02/kafka-logs03 dir.
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+Topic with replication factor:
+==============================
+See image: topic-with-replication-factor-1.png & topic-with-replication-factor-2.png
+Note: When no replication factor is defined: by default it is 1.
+
+Create topic: ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic new-test --partitions 2 --replication-factor 2
+Describe topic: ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --topic new-test --describe
+Topic: new-test	TopicId: JEjegDR9Q9m00h915Cq3bQ	PartitionCount: 2	ReplicationFactor: 2	Configs: segment.bytes=1073741824
+	Topic: new-test	Partition: 0	Leader: 1	Replicas: 1,0	Isr: 1,0
+	Topic: new-test	Partition: 1	Leader: 0	Replicas: 0,2	Isr: 0,2
+
+Interpretation:
+Broker (Leader) 1 leads Partition 0
+Broker (Leader) 0 leads Partition 1
+All replicas (0, 1, 2) are in-sync — no issues.
+
+Scenario: 
+Broker 1 goes down:
+-------------------
+If Broker 1 fails or stops, Kafka detects that the leader of Partition 0 (Broker 1) is gone.
+The controller broker automatically elects a new leader from the remaining in-sync replicas (ISR).
+After Failover (Broker 1 down), Now the topic description might look like this
+	Topic: new-test  Partition: 0  Leader: 0  Replicas: 1,0  Isr: 0
+	Topic: new-test  Partition: 1  Leader: 0  Replicas: 0,2  Isr: 0,2
+
+Broker 1 Comes Back:
+--------------------
+Once Broker 1 restarts, It automatically syncs its missing data from the new leader.
+When it catches up fully, it rejoins the ISR list. Then the description returns to
+	Topic: new-test  Partition: 0  Leader: 0  Replicas: 1,0  Isr: 0,1
+	Topic: new-test  Partition: 1  Leader: 0  Replicas: 0,2  Isr: 0,2
+Everything is back to normal.
+
+Now open temp dir & you will see: $xdg-open /tmp
+tmp/kafka-logs-01/
+	|->new-test-0
+	|->new-test-1
+tmp/kafka-logs-02/new-test-0
+tmp/kafka-logs-03/new-test-1
+Note: The partitions new-test-1/new-test-0 may be in different kafka-logs-01/kafka-logs02/kafka-logs03 dir.
+
+Note: replication-factor <= no of brokers
+------------------------------------------
+Create topic: ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic new-test-3 --partitions 2 --replication-factor 4
+Error while executing topic command : Replication factor: 4 larger than available brokers: 3.
+[2025-11-06 02:48:59,312] ERROR org.apache.kafka.common.errors.InvalidReplicationFactorException: Replication factor: 4 larger than available brokers: 3.
+ (kafka.admin.TopicCommand$)
+
+Note: (see image: leader-and-replica.png)
+-----------------------------------------
+There is no need to have leader and replica on the same broker (server) bcoz if it is down we will not have access to the messages.
+So leader and replica must be on the different broker (server).
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+

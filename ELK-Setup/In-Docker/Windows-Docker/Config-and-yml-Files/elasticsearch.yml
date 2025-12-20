@@ -1,0 +1,10 @@
+# Elasticsearch Props for localhost
+xpack.security.enabled: false
+xpack.security.enrollment.enabled: false  # Disable enrollment if not using security
+
+xpack.security.http.ssl.enabled: false  # Disable HTTP SSL
+xpack.security.transport.ssl.enabled: false  # Disable transport SSL
+
+discovery.type: single-node  # Set discovery type to single-node
+
+http.host: 0.0.0.0

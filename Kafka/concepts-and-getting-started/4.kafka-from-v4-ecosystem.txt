@@ -1,0 +1,409 @@
+Kafka:
+------
+Kafka 0.8 -> 2.x :: ZooKeeper required
+Kafka 3.0 -> 3.3 :: ZooKeeper required (KRaft optional, NOT production ready)
+Kafka 3.4 -> 3.9 :: Both ZooKeeper and KRaft supported (KRaft stable)
+Kafka 4.0+ :: ZooKeeper removed - KRaft mandatory
+
+Documentation: https://kafka.apache.org/documentation/
+_______________________________________________________
+| kAFKA - 4.0+ :: ZooKeeper removed - KRaft mandatory |
+-------------------------------------------------------
+
+See image: kafka-before-v4-and-after-v4.png
+
+Single-node (Standalone):
+=========================
+1. Check your log directory path: grep log.dirs ./config/server.properties
+	You’ll see something like: log.dirs=/tmp/kraft-combined-logs
+	
+2. Format the storage with a new cluster ID: KAFKA_CLUSTER_ID="$(./bin/kafka-storage.sh random-uuid)"
+
+3. Use that ID to format the directory as standalone (no external controllers needed):
+	./bin/kafka-storage.sh format -t $KAFKA_CLUSTER_ID -c ./config/server.properties --standalone
+
+4. Start kafka: ./bin/kafka-server-start.sh ./config/server.properties
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+Multi-node:
+===========
+1. Create a folder (i.e. /config/ecosystem) in order to keep multiple server.prperties file to start with multiple brokers.
+2. Keep server1.prperties and server2.prperties
+
+server1.properties:
+-------------------
+node.id=1
+#controller.quorum.bootstrap.servers=localhost:9093,localhost:9095,localhost:9097 :: try with this too
+controller.quorum.voters=1@localhost:9093,2@localhost:9095,3@localhost:9097
+listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093
+advertised.listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093
+log.dirs=/tmp/kraft-combined-logs-01
+
+server2.prperties:
+------------------
+node.id=2
+#controller.quorum.bootstrap.servers=localhost:9093,localhost:9095,localhost:9097 :: try with this too
+controller.quorum.voters=1@localhost:9093,2@localhost:9095,3@localhost:9097
+listeners=PLAINTEXT://localhost:9094,CONTROLLER://localhost:9095
+advertised.listeners=PLAINTEXT://localhost:9094,CONTROLLER://localhost:9095
+log.dirs=/tmp/kraft-combined-logs-02
+
+server3.prperties:
+------------------
+node.id=3
+#controller.quorum.bootstrap.servers=localhost:9093,localhost:9095,localhost:9097 :: try with this too
+controller.quorum.voters=1@localhost:9093,2@localhost:9095,3@localhost:9097
+listeners=PLAINTEXT://localhost:9096,CONTROLLER://localhost:9097
+advertised.listeners=PLAINTEXT://localhost:9096,CONTROLLER://localhost:9097
+log.dirs=/tmp/kraft-combined-logs-03
+
+
+3. Format Storage on Each Nodes:
+--------------------------------
+CLUSTER_ID="$(bin/kafka-storage.sh random-uuid)" :: Use this value for cluster-id
+CONTROLLER_1_UUID="$(bin/kafka-storage.sh random-uuid)" :: for broker(controller)-1
+CONTROLLER_2_UUID="$(bin/kafka-storage.sh random-uuid)" :: for broker(controller)-2
+CONTROLLER_3_UUID="$(bin/kafka-storage.sh random-uuid)" :: for broker(controller)-3
+
+# In each controller execute
+Command: ./bin/kafka-storage.sh format --config config/controller-server.properties --cluster-id ${CLUSTER_ID} \
+	 --initial-controllers "1@<controller-1-host>:<controller-1-port>:${CONTROLLER_1_UUID}, \
+                     		2@<controller-2-host>:<controller-2-port>:${CONTROLLER_2_UUID}, \
+                     		3@<controller-3-host>:<controller-3-port>:${CONTROLLER_3_UUID}"
+
+echo "CLUSTER_ID: ${CLUSTER_ID}, CONTROLLER_1_UUID: ${CONTROLLER_1_UUID}, CONTROLLER_2_UUID: ${CONTROLLER_2_UUID}, CONTROLLER_3_UUID: ${CONTROLLER_3_UUID}"
+	output: CLUSTER_ID: dcwYhkyzRpyvKosVrK885g, CONTROLLER_1_UUID: jmwm0V7qR8a6HmL4cikYeQ, CONTROLLER_2_UUID: L5FH_eUVRCymh277dlm6CA, CONTROLLER_3_UUID: x8mVBbzXRtCDDQJUi869tA
+	
+Format Storage on Node-1: ./bin/kafka-storage.sh format --config ./config/ecosystem/server-1.properties --cluster-id ${CLUSTER_ID} --initial-controllers "1@localhost:9093:${CONTROLLER_1_UUID},2@localhost:9095:${CONTROLLER_2_UUID},3@localhost:9097:${CONTROLLER_3_UUID}"
+Format Storage on Node-2: ./bin/kafka-storage.sh format --config ./config/ecosystem/server-2.properties --cluster-id ${CLUSTER_ID} --initial-controllers "1@localhost:9093:${CONTROLLER_1_UUID},2@localhost:9095:${CONTROLLER_2_UUID},3@localhost:9097:${CONTROLLER_3_UUID}"
+Format Storage on Node-3: ./bin/kafka-storage.sh format --config ./config/ecosystem/server-3.properties --cluster-id ${CLUSTER_ID} --initial-controllers "1@localhost:9093:${CONTROLLER_1_UUID},2@localhost:9095:${CONTROLLER_3_UUID},3@localhost:9097:${CONTROLLER_3_UUID}"
+
+
+4. Start Each Broker:
+---------------------
+Broker-1: ./bin/kafka-server-start.sh ./config/ecosystem/server-1.properties
+Broker-2: ./bin/kafka-server-start.sh ./config/ecosystem/server-2.properties
+Broker-3: ./bin/kafka-server-start.sh ./config/ecosystem/server-3.properties
+
+
+5. See the status: Through any one running kafka-server (9092/9094/9096):
+-------------------------------------------------------------------------
+./bin/kafka-metadata-quorum.sh --bootstrap-server localhost:9092 describe --status
+ClusterId:              8pGyfaAiRIGca8LlmkBwhQ
+LeaderId:               1
+LeaderEpoch:            3
+HighWatermark:          1106
+MaxFollowerLag:         0
+MaxFollowerLagTimeMs:   0
+CurrentVoters:          [{"id": 1, "directoryId": "4KTVNg-yTySZi9ziMiKtCg", "endpoints": ["CONTROLLER://localhost:9093"]}, 
+			 {"id": 2, "directoryId": "8PKu48_uSFGd0Royzq515A", "endpoints": ["CONTROLLER://localhost:9095"]}, 
+			 {"id": 3, "directoryId": "UgKobJ5MTrCyFz3hUI2-fg", "endpoints": ["CONTROLLER://localhost:9097"]}]
+CurrentObservers:       []
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+State of the KRaft (controller) quorum:
+=======================================
+Let’s break down each field clearly 
+
+ClusterId:
+----------
+A unique identifier for the entire Kafka cluster.
+It is generated when you first format the log directories using kafka-storage.sh format.
+All nodes in the same Kafka cluster must have the same ClusterId in their meta.properties files.
+If it mismatches, the node will refuse to join the cluster.
+
+LeaderId:
+---------
+The node ID of the current controller quorum leader.
+In your case, node.id=1 (controller on port 9093) is the active leader.
+This node coordinates metadata operations like topic creation, partition assignment, etc.
+
+LeaderEpoch:
+------------
+Number of times the controller leadership has changed.
+Increments each time a new controller leader is elected.
+If your controller crashed or restarted, you’d see this number increase.
+
+HighWatermark:
+--------------
+Represents the highest committed offset (log position) that is known to be replicated by all controller nodes.
+It’s similar to the concept of a replication offset in Kafka topics, but for metadata replication.
+Essentially: up to this log index, all quorum nodes agree on the same metadata state.
+
+MaxFollowerLag:
+---------------
+Indicates the maximum number of log entries any follower (controller node) is behind the leader.
+A value of 0 means all nodes are fully caught up with the leader’s metadata log.
+
+MaxFollowerLagTimeMs:
+---------------------
+Measures how long (in milliseconds) the most lagging follower is behind the leader.
+A value of 0 means all controllers are perfectly in sync.
+
+CurrentVoters:
+--------------
+Lists all the voting controller nodes in the quorum.
+Each entry shows:
+	id: the node.id of the controller.
+	directoryId: unique per-node ID stored in that controller’s local log directory.
+	endpoints: the controller communication address (matches the CONTROLLER:// listener in your config).
+These nodes participate in the Raft consensus to replicate cluster metadata and elect leaders.
+
+CurrentObservers:
+-----------------
+List of observer nodes (if any).
+Observers can read metadata updates but do not vote.
+Empty here — meaning all your 3 nodes are full voters, no observers.
+
+In short:
+---------
+Your KRaft quorum is healthy.
+Node 1 is leader.
+Nodes 2 and 3 are in sync.
+No lag or replication issues.
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+Kafka-Leader(Topic's Partition Leader)-Allocation:
+==================================================
+It Follows Round-Robin Algorithm.
+See Image: kafka-leader-allocation-1.png & kafka-leader-allocation-2.png
+
+
+Role-Of-Controller:
+===================
+See Image: role-of-controller.png
+__________________________________________________________________________________________________________
+|     Function             |   Description                                                               |
+| ------------------------ | --------------------------------------------------------------------------- |
+| Metadata Management      | Stores and updates topic, partition, and broker information                 |
+| Leadership Election      | Chooses partition leaders and controller leader                             |
+| Failover Handling        | Detects broker failures, reassigns partitions                               |
+| Replication Coordination | Ensures all metadata updates are replicated across controller quorum        |
+| Configuration Management | Applies cluster- and topic-level configuration updates                      |
+| Client Discovery         | Brokers use controller metadata to inform producers/consumers about leaders |
+----------------------------------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+Producer's Metadata Request:
+============================
+See Image: producer-metadata-request-1.png & producer-metadata-request-2.png
+_______________________________________________________________________________________________________________
+| Stage                        | Who Talks to Whom                         | Purpose                          |
+| -----------------------------| ----------------------------------------- | -------------------------------- |
+| 1️⃣ Producer bootstraps       | Producer -> Broker                        | Discover cluster                 |
+| 2️⃣ Broker queries controller | Broker -> Controller quorum               | Get latest metadata              |
+| 3️⃣ Broker replies            | Broker -> Producer                        | Send metadata response           |
+| 4️⃣ Producer caches info      | Producer                                  | Chooses correct partition leader |
+| 5️⃣ Leader changes            | Controller -> Brokers -> Producer refresh | Keep consistent routing          |
+---------------------------------------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+Kafka-Follower-Allocation:
+==========================
+Note: Must see images for better understanding
+For leaders distribution start from the very first broker and distribute.
+
+./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic test --partitions 4 -replication-factor 2
+Whenever we are distributing the followers (when -replication-factor 2) skip the first broker then distribute.
+See image: kafka-follower-allocation-1.png & kafka-follower-allocation-2.png
+
+./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic test --partitions 4 -replication-factor 3
+Whenever we are distributing the followers (when -replication-factor 3) skip the first and second broker then distribute.
+See image: kafka-follower-allocation-3.png & kafka-follower-allocation-4.png
+
+And so on ...
+
+Now if any one broker goes down, we still have each partitions available in other brokers and messages won't be lost for any partition.
+See image: kafka-follower-allocation-3.png (broker-1 down, still each partitions available in brokers-2 and broker-3)
+Note: If broker conatining leader is goes down then the most up-to-date Kafka-Replica is choosen as leader by the controller.
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+Roles Of a Kafka-Replica:
+=========================
+See images: roles-of-Kafka-replica-1.png & roles-of-Kafka-replica-2.png
+./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic test --partitions 3 -replication-factor 3
+Role of a Kafka-Replica is to be staying in sync with leader.
+Note: If broker conatining leader is goes down then the most up-to-date Kafka-Replica is choosen as leader by the controller.
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+In-Sync-Replica (ISR):
+======================
+Create Topic: ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic test --partitions 3 -replication-factor 3
+
+Now open temp dir & you will see: $xdg-open /tmp
+------------------------------------------------
+tmp/kraft-combined-logs-01/
+	|->test-0
+	|->test-1
+	|->test-2
+tmp/kraft-combined-logs-02/
+	|->test-0
+	|->test-1
+	|->test-2
+tmp/kraft-combined-logs-03/
+	|->test-0
+	|->test-1
+	|->test-2
+
+Describe Topic: ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --topic test --describe
+Topic: test	TopicId: sbynEoegToer3iezgTPPZQ	PartitionCount: 3	ReplicationFactor: 3	Configs: segment.bytes=1073741824
+	Topic: test	Partition: 0	Leader: 2	Replicas: 2,3,1	Isr: 2,3,1	Elr: 	LastKnownElr: 
+	Topic: test	Partition: 1	Leader: 3	Replicas: 3,1,2	Isr: 3,1,2	Elr: 	LastKnownElr: 
+	Topic: test	Partition: 2	Leader: 1	Replicas: 1,2,3	Isr: 1,2,3	Elr: 	LastKnownElr:
+
+Scenario: 
+Broker 1 goes down:
+-------------------
+If Broker 1 fails or stops, Kafka detects that the leader of Partition 0 (Broker 1) is gone.
+The controller broker automatically elects a new leader from the remaining in-sync replicas (ISR).
+After Failover (Broker 1 down), Now the topic description might look like this
+Describe Topic: ./bin/kafka-topics.sh --bootstrap-server localhost:9094 --topic test --describe
+Topic: test	TopicId: sbynEoegToer3iezgTPPZQ	PartitionCount: 3	ReplicationFactor: 3	Configs: segment.bytes=1073741824
+	Topic: test	Partition: 0	Leader: 2	Replicas: 2,3,1	Isr: 2,3	Elr: 	LastKnownElr: 
+	Topic: test	Partition: 1	Leader: 3	Replicas: 3,1,2	Isr: 3,2	Elr: 	LastKnownElr: 
+	Topic: test	Partition: 2	Leader: 2	Replicas: 1,2,3	Isr: 2,3	Elr: 	LastKnownElr:
+
+Broker 1 Comes Back:
+--------------------
+Once Broker 1 restarts, It automatically syncs its missing data from the new leader.
+When it catches up fully, it rejoins the ISR list. Then the description returns to
+Describe Topic: ./bin/kafka-topics.sh --bootstrap-server localhost:9094 --topic test --describe
+Topic: test	TopicId: sbynEoegToer3iezgTPPZQ	PartitionCount: 3	ReplicationFactor: 3	Configs: segment.bytes=1073741824
+	Topic: test	Partition: 0	Leader: 2	Replicas: 2,3,1	Isr: 2,3,1	Elr: 	LastKnownElr: 
+	Topic: test	Partition: 1	Leader: 3	Replicas: 3,1,2	Isr: 3,2,1	Elr: 	LastKnownElr: 
+	Topic: test	Partition: 2	Leader: 2	Replicas: 1,2,3	Isr: 2,3,1	Elr: 	LastKnownElr:
+
+Everything is back to normal.
+Observation: ISR changes dynamically based on the available brokers.
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+How to Qualify into ISR List:
+=============================
+See images: to-qualify-into-ISR-list-1.png & to-qualify-into-ISR-list-2.png
+
+ISR (In-Sync Replicas) are replicas that are fully caught up with the leader’s log.
+Only replicas in ISR are considered reliable for committing records.
+
+How a replica becomes part of ISR:
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+| Step               | Condition                                                    | Explanation                                                     |
+| ------------------ | ------------------------------------------------------------ | --------------------------------------------------------------- |
+| 1. Replica starts  | Broker joins cluster and is assigned a partition replica     | It starts fetching data from the leader.                        |
+| 2. Log catch-up    | Replica’s log end offset ≈ Leader’s log end offset           | Replica fetches data via the **Fetch API** until it catches up. |
+| 3. Sync stability  | Replica stays consistently up-to-date for a certain duration | Controlled by configuration parameters.                         |
+| 4. Added to ISR    | When fully caught up and stable                              | Controller updates the ISR list for that partition.             |
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Important Config Parameters:
+-------------------------------------------------------------------------------------------------------------------------------------------
+| Property                   | Meaning                                    | Effect                                                        |
+| -------------------------- | ------------------------------------------ | ------------------------------------------------------------- |
+| replica.lag.time.max.ms    | Maximum time replica can lag behind leader | If no fetch request within this window -> removed from ISR    |
+| fetch.max.bytes            | Max bytes replica fetches per request      | Controls speed of catch-up                                    |
+| replica.fetch.min.bytes    | Minimum data fetched                       | Prevents inefficient small fetches                            |
+-------------------------------------------------------------------------------------------------------------------------------------------
+
+Removal from ISR:
+-----------------
+A replica is removed from the ISR if:
+	It falls behind the leader beyond replica.lag.time.max.ms, OR
+	The controller detects fetch timeout, OR
+	The broker goes offline.
+
+Rejoining ISR:
+--------------
+Once a lagging replica:
+	Recovers,
+	Catches up to leader’s high watermark, and
+	Maintains steady sync for the allowed window ->
+	it’s added back to the ISR list automatically by the controller
+
+Example - ISR Lifecycle:
+--------------------------------------
+| Event               | ISR List     |
+| ------------------- | ------------ |
+| Start (3 replicas)  | [1, 2, 3]    |
+| Broker 3 slows down | [1, 2]       |
+| Broker 3 catches up | [1, 2, 3]    |
+--------------------------------------
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+How Producer and Consumer Connects to Broker:
+=============================================
+See image: producer-and-consumer-connects-to-broker.png
+            +--------------------+
+            |   Controller Node  |
+            +--------------------+
+                ^
+             	│ (Cluster metadata)
+                V
++-------------------+       +-------------------+       +-------------------+
+|     Broker 1      | <-->  |     Broker 2      | <-->  |     Broker 3      |
+| (Leader topicA-0) |       | (Leader topicA-1) |       | (Leader topicA-2) |
++-------------------+       +-------------------+       +-------------------+
+        ^  ^                          ^  ^                          ^
+     	│  │                          │  │                          │
+     	│  │                          │  │                          │
+      PRODUCER -> ------------- -> Sends to leader partition
+      CONSUMER <- ------------- <- Fetches from leader partition
+
+Note: Learn in depth about this point.
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+Configure/Setting up Minimum ISR:
+=================================
+Configuring Minimum ISR (In-Sync Replicas) is a key part of making Kafka reliable and fault-tolerant.
+
+What Is Minimum ISR?
+--------------------
+ISR (In-Sync Replicas) are replicas that have fully caught up with the leader’s log.
+Kafka only commits messages that are replicated to all ISR members.
+
+'min.insync.replicas' defines the minimum number of replicas that must acknowledge a write for it to be considered successful.
+If the ISR count falls below this minimum, producers will get an error and writes will fail — ensuring no data loss.
+
+Topic-Level Configuration:
+--------------------------
+1. You can also configure it per topic at creation time: --config min.insync.replica=<no-of-replica>
+	kafka-topics.sh --bootstrap-server localhost:9092 --create --topic test-topic --partitions 3 --replication-factor 3 --config min.insync.replicas=2
+	i.e. ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic new-test --partitions 1 --replication-factor 3 --config min.insync.replicas=2
+2. Or alter an existing topic:
+	kafka-configs.sh --alter --entity-type topics --entity-name test-topic --add-config min.insync.replicas=2
+
+Example Scenario:
+------------------------------------------------------------------------------------------------
+| Replication Factor     | min.insync.replicas     | Active ISR     | Write Outcome            |
+| ---------------------- | ----------------------- | -------------- | -------------------------|
+| 3                      | 2                       | 3              | Success                  |
+| 3                      | 2                       | 2              | Success                  |
+| 3                      | 2                       | 1              | Fail (NotEnoughReplicas) |
+------------------------------------------------------------------------------------------------
+Note#: In any point of time if you are pushing data to the one particular broker make sure there are enough copies of particular partition available in other brokers.
+
+Hands-on practice:
+------------------
+1. Create Topic with min.insync.replicas=2:  ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic new-test --partitions 1 --replication-factor 3 --config min.insync.replicas=2
+2. Open Producer Console: ./bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic new-test
+3. Open Consumer Console: ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic new-test --from-beginning
+
+If there are not enough copies of particular partition available: Messages are rejected since there are fewer in-sync replicas than required.
+---------------------------------------------------------------------------------------------------------------------------------------------
+2025-11-11 23:02:48,213] WARN [Producer clientId=console-producer] Got error produce response with correlation id 13 on topic-partition new-test-0, retrying (2 attempts left). Error: NOT_ENOUGH_REPLICAS (org.apache.kafka.clients.producer.internals.Sender)
+[2025-11-11 23:02:48,299] WARN [Producer clientId=console-producer] Got error produce response with correlation id 14 on topic-partition new-test-0, retrying (1 attempts left). Error: NOT_ENOUGH_REPLICAS (org.apache.kafka.clients.producer.internals.Sender)
+[2025-11-11 23:02:48,534] WARN [Producer clientId=console-producer] Got error produce response with correlation id 15 on topic-partition new-test-0, retrying (0 attempts left). Error: NOT_ENOUGH_REPLICAS (org.apache.kafka.clients.producer.internals.Sender)
+[2025-11-11 23:02:48,973] ERROR Error when sending message to topic new-test with key: null, value: 5 bytes with error: (org.apache.kafka.clients.producer.internals.ErrorLoggingCallback)
+org.apache.kafka.common.errors.NotEnoughReplicasException: Messages are rejected since there are fewer in-sync replicas than required.
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+

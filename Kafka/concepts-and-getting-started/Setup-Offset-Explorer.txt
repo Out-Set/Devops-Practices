@@ -1,0 +1,48 @@
+Download: https://www.kafkatool.com/download.html
+
+Understand Kafka Structure: https://www.youtube.com/playlist?list=PLkz1SCf5iB4enAR00Z46JwY9GGkaS2NON
+
+Note: Works well with jdk-11
+
+1. Download jdk-11:
+-------------------
+$ sudo apt update
+$ sudo apt install -y openjdk-11-jdk
+
+
+2. Grant Execution Permission:
+------------------------------
+Goto the download dir: $ chmod +x offsetexplorer.sh
+
+
+3. Set INSTALL4J_JAVA_HOME:
+---------------------------
+    i). Find the Java installation path: $ update-alternatives --config java
+   ii). Export the variable: $ export INSTALL4J_JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+  iii). (Optional) Add this to your shell configuration to persist the change: 
+            $ echo "export INSTALL4J_JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> ~/.bashrc
+              source ~/.bashrc
+              
+              
+5. Verify If the Correct JVM Is Being Used: $ echo $INSTALL4J_JAVA_HOME
+
+
+6. Run Offset Explorer: $ ./offsetexplorer.sh
+
+--------------------------------------------------------------------------------------------------
+
+Add clusters:
+-------------
+Clusters -> Add new connection
+		    |-> cluster name (give a name)
+		    |-> Boostrap server: ip-addr:9092
+		    |-> kafka Cluster Version: choose current version u are using
+		    |-> Enable Zookeeper access: tick
+		    |-> Host: ip-addr
+		    |-> Port: 2181
+		    |-> chroot path: /
+
+
+
+
+

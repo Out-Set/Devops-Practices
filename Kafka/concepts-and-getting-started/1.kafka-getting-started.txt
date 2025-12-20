@@ -1,0 +1,66 @@
+Kafka:
+------
+Kafka 0.8 -> 2.x :: ZooKeeper required
+Kafka 3.0 -> 3.3 :: ZooKeeper required (KRaft optional, NOT production ready)
+Kafka 3.4 -> 3.9 :: Both ZooKeeper and KRaft supported (KRaft stable)
+Kafka 4.0+ :: ZooKeeper removed - KRaft mandatory
+
+Documentation: https://kafka.apache.org/documentation/
+
+Note:
+-----
+You can use ZooKeeper until Kafka 3.9.x
+Starting from 4.0 only KRaft mode is supported -- no more ZooKeeper.
+
+Download Kafka binary then extarct it: https://kafka.apache.org/downloads
+
+Start Zookeeper Server: ./bin/zookeeper-server-start.sh ./config/zookeeper.properties
+Start Kafka Server: ./bin/kafka-server-start.sh ./config/server.properties
+
+Create a Topic: ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic myabc
+Since you haven't given any partition information, there will be only 1 partition myabc-0 by default
+Note: You can change the default settings of partition creation, going to the /config/server.properties (num.partitions=1) to any number.
+
+Create a Topic with partition information: ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic mypqr --partitions 3
+Now there will be 3 partitions mypqr-0, mypqr-1 and mypqr-2
+
+Note: To view these topic open /tmp/kafka-logs dir by running command: xdg-open /tmp/kafka-logs
+
+Get the description of a topic: ./bin/kafka-topics.sh --bootstrap-server localhost:9092 --topic mypqr --describe
+Topic: mypqr	TopicId: 3dSk0DLsTjm_D1gJtPcgsA	PartitionCount: 3	ReplicationFactor: 1	Configs: segment.bytes=1073741824
+	Topic: mypqr	Partition: 0	Leader: 0	Replicas: 0	Isr: 0
+	Topic: mypqr	Partition: 1	Leader: 0	Replicas: 0	Isr: 0
+	Topic: mypqr	Partition: 2	Leader: 0	Replicas: 0	Isr: 0
+
+Open Produccer Console: ./bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic mypqr
+Open Consumer Console & consume on real time: ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic mypqr
+Open Consumer Console & consume everything from beginning: ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic mypqr --from-beginning
+
+Consume messages with Partition, key and value information: --property print.partition=true --property print.value=true
+./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic mypqr --property print.partition=true --property print.key=true --property print.value=true --from-beginning
+Partition:0	1
+Partition:0	2
+Partition:0	5
+Partition:0	6
+Partition:0	8
+
+Kafka-Documentation: https://kafka.apache.org/documentation/
+RoundRobinPartitioner: org.apache.kafka.clients.producer.RoundRobinPartitioner
+
+Streaming data to different partitions with RoundRobinPartitioner:
+Producer Console: ./bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic mypqr --producer-property partitioner.class=org.apache.kafka.clients.producer.RoundRobinPartitioner
+>16
+>17
+>18
+>19
+>20
+>21
+
+Consumer Console: ./bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic mypqr --property print.partition=true --property print.value=true --from-beginning
+Partition:1	16
+Partition:2	17
+Partition:0	18
+Partition:1	19
+Partition:2	20
+Partition:0	21
+

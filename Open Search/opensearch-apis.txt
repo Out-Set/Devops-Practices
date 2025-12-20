@@ -1,0 +1,221 @@
+Add data to OpenSearch:
+-----------------------
+curl -X POST "https://localhost:9200/books/_doc/1" -u admin:"@qazxsW$345#" -k -H "Content-Type: application/json" -d "{\"title\": \"The Hobbit\", \"author\": \"J.R.R. Tolkien\", \"year\": 1937}"
+
+Search data from OpenSearch:
+----------------------------
+curl -X GET "https://localhost:9200/books/_doc/1" -u admin:"@qazxsW$345#" -k
+
+Or
+
+OpenSearch-Dashboard:
+---------------------
+In powershell to know admin password: docker inspect opensearch-node | Select-String "OPENSEARCH_INITIAL_ADMIN_PASSWORD"
+
+user: admin
+password: u got from above command by running in powershell
+
+Goto devtools and run queries
+i.e.
+GET _search
+{
+  "query": {
+    "match_all": {}
+  }
+}
+
+GET books/_search
+{
+  "query": {
+    "match_all": {}
+  }
+}
+
+GET books/_search
+{
+  "query": {
+    "match": {
+      "title": "Hobbit"
+    }
+  }
+}
+
+GET _search
+{
+  "query": {
+    "match": {
+      "author": "J.R.R. Tolkien"
+    }
+  }
+}
+
+Insert Records:
+---------------
+POST books/_doc
+{
+  "title": "Theroy for everything",
+  "author": "St. Hawking",
+  "year": 1937
+}
+
+
+Applying rule on tests:
+-----------------------
+# 1. Create the Index for Lab Results
+PUT lab_results
+{
+  "mappings": {
+    "properties": {
+      "patient_id":    { "type": "keyword" },
+      "test_code":     { "type": "keyword" },
+      "result_value":  { "type": "double" },
+      "unit":          { "type": "keyword" },
+      "status":        { "type": "keyword" },
+      "auto_approved": { "type": "boolean" },
+      "approved_by":   { "type": "keyword" },
+      "timestamp":     { "type": "date" }
+    }
+  }
+}
+
+# 2. Create the Index for Rules
+PUT lab_rules
+{
+  "mappings": {
+    "properties": {
+      "id":         { "type": "keyword" },
+      "test_code":  { "type": "keyword" },
+      "expression": { "type": "text" },
+      "action":     { "type": "keyword" },
+      "priority":   { "type": "integer" },
+      "active":     { "type": "boolean" }
+    }
+  }
+}
+
+# 3. Insert Some Sample Rules
+POST lab_rules/_bulk
+{ "index": { "_id": "rule_glucose_low" } }
+{ "id": "rule_glucose_low", "test_code": "GLU", "expression": "doc['result_value'].value < 100", "action": "AUTO_APPROVE", "priority": 1, "active": true }
+{ "index": { "_id": "rule_sodium_high" } }
+{ "id": "rule_sodium_high", "test_code": "NA", "expression": "doc['result_value'].value > 145", "action": "REVIEW", "priority": 2, "active": true }
+{ "index": { "_id": "rule_potassium_low" } }
+{ "id": "rule_potassium_low", "test_code": "K", "expression": "doc['result_value'].value < 3.5", "action": "REVIEW", "priority": 3, "active": true }
+
+# 4. Add Some Lab Results to Process
+POST lab_results/_bulk
+{ "index": {} }
+{ "patient_id": "P001", "test_code": "GLU", "result_value": 92.5, "unit": "mg/dL", "status": "PENDING_REVIEW", "timestamp": "2025-10-27T09:00:00Z" }
+{ "index": {} }
+{ "patient_id": "P002", "test_code": "NA",  "result_value": 148, "unit": "mmol/L", "status": "PENDING_REVIEW", "timestamp": "2025-10-27T09:01:00Z" }
+{ "index": {} }
+{ "patient_id": "P003", "test_code": "K",   "result_value": 3.1, "unit": "mmol/L", "status": "PENDING_REVIEW", "timestamp": "2025-10-27T09:02:00Z" }
+
+GET lab_results/_search
+{
+  "query": {
+    "match": {
+      "status": "REVIEW"
+    }
+  }
+}
+
+GET lab_results/_search
+{
+  "query": {
+    "term": { "status": "APPROVED" }
+  }
+}
+
+
+# 5. Execute a Rule Directly in OpenSearch (Auto-Approval Script)
+POST lab_results/_update_by_query
+{
+  "script": {
+    "source": """
+      ctx._source.auto_approved = true;
+      ctx._source.status = 'APPROVED';
+      ctx._source.approved_by = 'RULE:rule_glucose_low';
+    """,
+    "lang": "painless"
+  },
+  "query": {
+    "bool": {
+      "must": [
+        { "term": { "test_code": "GLU" }},
+        {
+          "script": {
+            "script": {
+              "source": "doc['result_value'].value < 100"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
+# 6. Automate Execution for All Rules (Dynamic Approach)
+from opensearchpy import OpenSearch
+
+client = OpenSearch(
+    hosts=[{'host': 'localhost', 'port': 9200}],
+    http_auth=('admin', '@qazxsW$345#'),
+    use_ssl=True,
+    verify_certs=False,
+    ssl_show_warn=False
+)
+
+# Step 1: Get all active rules
+rules = client.search(index="lab_rules", body={"query": {"term": {"active": True}}})
+
+for rule in rules["hits"]["hits"]:
+    r = rule["_source"]
+    print(f"Applying rule: {r['id']}")
+    query = {
+        "script": {
+            "source": f"""
+              if (params.action == 'AUTO_APPROVE') {{
+                ctx._source.auto_approved = true;
+                ctx._source.status = 'APPROVED';
+                ctx._source.approved_by = params.rule_id;
+              }} else {{
+                ctx._source.auto_approved = false;
+                ctx._source.status = 'REVIEW';
+              }}
+            """,
+            "params": {"action": r["action"], "rule_id": r["id"]}
+        },
+        "query": {
+            "bool": {
+                "must": [
+                    {"term": {"test_code": r["test_code"]}},
+                    {"script": {"script": {"source": r["expression"]}}}
+                ]
+            }
+        }
+    }
+    client.update_by_query(index="lab_results", body=query, conflicts="proceed")
+
+
+
+POST lab_tests/_update_by_query
+{
+  "script": {
+    "source": """
+      ctx._source.auto_approved = true;
+      ctx._source.status = 'APPROVED';
+      ctx._source.approved_by = 'RULE:rule_glucose_low';
+    """,
+    "lang": "painless"
+  },
+  "query": {
+    "bool": {
+      "must": [
+        { "term": { "test_code.keyword": "GLU" }},
+        { "range": { "result_value": { "lt": 100 } } }
+      ]
+    }
+  }
+}
+

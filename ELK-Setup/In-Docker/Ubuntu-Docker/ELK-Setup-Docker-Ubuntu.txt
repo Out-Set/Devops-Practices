@@ -1,0 +1,206 @@
+ELK Setup: In Docker:
++++++++++++++++++++++
+
+Note: Get inside into docker container
+---------------------------------------
+	docker exec -it <container_id_or_name> /bin/bash
+	
+Note: 
+-----
+Before starting setup, keep all the configs and yml files in a dir, also log-file
+----------------------------------------------------------------------------------
+  i.e.	Log file path: /home/savan/Desktop/App-Log-File-and-ELK-Configs/App-Log-File
+	Config file path: /home/savan/Desktop/App-Log-File-and-ELK-Configs/ELK-Config-Files
+
+
+Elasticsearch:
+==============
+Ref: https://www.elastic.co/guide/en/elasticsearch/reference/current/docker.html
+
+1.Create a new docker network:
+------------------------------
+	docker network create elastic
+
+2.Pull Docker Image:
+--------------------
+	docker pull docker.elastic.co/elasticsearch/elasticsearch:8.15.1
+
+3.Create Docker Container:
+--------------------------
+	1.Create a elasticsearch.yml file with followings lines
+        	________________________________________________________________________________________________________
+		# Enable security features
+		xpack.security.enabled: false
+
+		# Enable enrollment (for TLS and secure setup if needed)
+		xpack.security.enrollment.enabled: true
+
+		# Enable SSL for HTTP and transport (required for Fleet)
+		xpack.security.http.ssl.enabled: false  # Optional: Keep false if SSL is not needed for HTTP
+		xpack.security.transport.ssl.enabled: false  # Optional: Keep false for testing, set true in production
+
+		# Cluster configuration
+		discovery.type: single-node  # Set discovery type to single-node
+
+		# Allow access from outside
+		http.host: 0.0.0.0  # Binds Elasticsearch to all network interfaces
+		--------------------------------------------------------------------------------------------------------
+		
+	2.Attach this file with following Container-creation command
+		docker run -d --name <some-name> --net <network-created> -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" 
+		-v path/to/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml docker.elastic.co/elasticsearch/elasticsearch:8.15.1
+		
+			example: docker run -d --name elasticsearch --net elastic -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" 
+				 -v /home/savan/Desktop/App-Log-File-and-ELK-Configs/ELK-Config-Files/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml 
+				 docker.elastic.co/elasticsearch/elasticsearch:8.15.1
+
+4.Verify Elasticsearch:
+-----------------------
+	Goto: http://localhost:9200/
+
+==============================================================================================================================================================
+
+Logstash:
+=========
+Ref: https://www.elastic.co/guide/en/logstash/current/docker.html
+
+1.Pull Docker Image:
+--------------------
+	docker pull docker.elastic.co/logstash/logstash:8.15.1
+
+2.Create Docker Container:
+--------------------------
+	1.Create a logstash.yml file with followings lines
+		___________________________________________
+		# Allows access from any network interface
+		http.host: "0.0.0.0"
+		
+		# Default API port
+		http.port: 9600
+		--------------------------------------------
+		
+	2.Create a logstash.conf file with followings lines
+		___________________________________________________________________________________________________________________________
+		input {
+			file {
+				path => "/App-Log-File/app.log"
+        			type => "syslog"
+        			start_position => "beginning"  # or end as you needed
+			}
+		}
+
+		output {
+			stdout { codec => rubydebug }
+    
+			elasticsearch {
+				hosts => ["http://elasticsearch:9200"]  # Use the container name 'elasticsearch' instead of 'localhost'
+        			data_stream => true
+        			data_stream_type => "logs"
+        			data_stream_dataset => "applogs"
+        			data_stream_namespace => "default"
+			}
+		}
+		-----------------------------------------------------------------------------------------------------------------------------
+	
+	3.Attach these files with following Container-creation command, including your application log file too.
+		docker run --name <some-name> --net <network-created>
+		-v path/to/logstash.conf:/usr/share/logstash/pipeline/logstash.conf # Mount the custom logstash.conf
+		-v "path/to/logs:/logs"  # Mount the app log file
+		-v path/to/logstash.yml:/usr/share/logstash/config/logstash.yml  # Mount the custom logstash.yml
+		-p 5044:5044 
+		-p 9600:9600  # Port for Logstash API
+		-d docker.elastic.co/logstash/logstash:8.15.1
+
+		example: docker run --name logstash --net elastic 
+			 -v /home/savan/Desktop/App-Log-File-and-ELK-Configs/ELK-Config-Files/logstash.conf:/usr/share/logstash/pipeline/logstash.conf 
+			 -v "/home/savan/Desktop/App-Log-File-and-ELK-Configs/App-Log-File:/App-Log-File" 
+			 -v /home/savan/Desktop/App-Log-File-and-ELK-Configs/ELK-Config-Files/logstash.yml:/usr/share/logstash/config/logstash.yml 
+			 -p 5044:5044 
+			 -p 9600:9600 
+			 -d docker.elastic.co/logstash/logstash:8.15.1
+
+4.Verify Logstash:
+------------------
+	Goto: http://localhost:9600/
+
+#Note for Logstash.conf: start_position Options:
+beginning:
+----------
+	Description: 
+		-> When start_position is set to "beginning", Logstash starts reading the log file from the very first line. 
+		-> This is useful when you want to ensure that all log entries are processed from the start of the file.
+		
+	Use Case:
+		-> When processing a new log file for the first time.
+		-> When you want to reprocess all logs after a pipeline restart or configuration change.
+		-> Ideal for development, testing, or when the log data is historical, and you want to process everything from scratch.
+
+end:
+----
+	Description: 
+		-> When start_position is set to "end", Logstash begins reading from the end of the file. 
+		-> It means Logstash will only process new log entries that are appended after it starts running. 
+		-> This option is helpful for tailing live log files.
+		
+	Use Case:
+		-> Useful for monitoring and processing real-time logs (like system logs or application logs).
+		-> Prevents Logstash from processing older log entries that were already handled or are not relevant.
+
+==============================================================================================================================================================
+
+Kibana:
+=======
+Ref: https://www.elastic.co/guide/en/kibana/current/docker.html
+
+Note: Ignore the 1st step if already done in Elasticsearch
+
+1.Create a new docker network:
+------------------------------
+	docker network create elastic
+
+2.Pull Docker Image:
+--------------------
+	docker pull docker.elastic.co/kibana/kibana:8.15.1
+
+3.Create Docker Container:
+--------------------------
+	1.Create a kibana.yml file with followings lines
+		___________________________________________________
+		# Allows access from any network interface
+		server.host: "0.0.0.0"
+
+		# URL of your Elasticsearch instance
+		elasticsearch.hosts: ["http://elasticsearch:9200"]
+		----------------------------------------------------
+		
+	3.Attach this file with following Container-creation command
+		docker run --name <some-name> --net <network-created> 
+		-v path/to/kibana.yml:/usr/share/kibana/config/kibana.yml 
+		-p 5601:5601 -d docker.elastic.co/kibana/kibana:8.15.1
+		
+		example: docker run --name kibana --net elastic 
+			 -v C:/Users/hp/Documents/ELK-in-Docker/kibana.yml:/usr/share/kibana/config/kibana.yml 
+			 -p 5601:5601 -d docker.elastic.co/kibana/kibana:8.15.1
+
+4.Access the kibana-dash:
+-------------------------
+Goto: http://localhost:5601/
+
+
+5.On Kibana-Dashboard:
+----------------------
+	|-> Management -> Stack Management 
+	|			|-> Kibana -> Data Views -> Create data view
+    	|                                                   	|
+	|						    	|-> Name (Give it a name)
+	|						    	|-> Index pattern ( View from the right side & choose one which all showing as 'Data stream' )
+	|							|                      Copy (one as 'Data stream') and paste into Index pattern
+	|							|
+	|							|-> Click 'Save data view to kibana'
+	|
+	|-> Analytics -> Discover
+	
+
+
+
+

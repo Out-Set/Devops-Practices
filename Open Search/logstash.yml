@@ -1,0 +1,6 @@
+api.http.host: "0.0.0.0"  # Allows access from any network interface
+api.http.port: 9600       # Default API port
+
+# Paths of logstash.yml and pipelines.yml in logstash container
+# /usr/share/logstash/config/logstash.yml
+# /usr/share/logstash/config/pipelines.yml

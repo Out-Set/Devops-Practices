@@ -1,0 +1,11 @@
+If you want to merge all the changes from dev into uat without worrying about resolving any conflicts, 
+you can use a force merge (also called a "hard reset" in some cases) to essentially discard any conflicting 
+changes in uat and forcefully accept all the changes from dev.
+
+1. git checkout uat — Switch to the uat branch.
+
+2. git fetch origin — Fetch the latest changes.
+
+3. git reset --hard origin/dev — Reset uat to exactly match dev (discard any changes in uat).
+
+4. git push origin uat --force — Force push the changes to the remote uat branch.
