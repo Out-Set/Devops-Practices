@@ -1,0 +1,162 @@
+Documentation: https://docs.nginx.com/nginx/admin-guide/web-server
+
+--------------------------------------------------------------------------------------------------
+
+VIM editor:
+===========
+install: sudo apt install vim
+
+How to use:
+===========
+    1. Open file with vim: sudo vim <file.ext>
+    2. Press 'i' for insert mode and start writting into file.
+    3. After completed writting press 'esc' or 'ctrl+c' then :wq and press enter to save the file.
+
+--------------------------------------------------------------------------------------------------
+
+Serving static content:
+=======================
+1. Goto the directory: cd /etc/nginx
+2. Create a backup of nginx.conf: sudo mv nginx.conf nginx-backup.conf
+3. Create nginx.conf: sudo touch nginx.conf
+4. Edit nginx.conf: sudo vim nginx.conf
+	events {
+
+	}
+	http {
+		server {
+			listen 80;
+			server_name _;
+
+			location / {
+				return 200 "Hello form Nginx Conf File";
+			}
+		}
+	}
+5. View file content: cat nginx.conf
+6: Test nginx config: sudo nginx -t
+7. Reload nginx: sudo nginx -s reload
+8. http://localhost:80: Hello form Nginx Conf File
+
+--------------------------------------------------------------------------------------------------
+
+Serving a webpage:
+==================
+1. Create a directory: sudo mkdir website
+2. Goto the directory: cd website/
+3. Create index,html: sudo touch index.html
+4. Edit index.html: sudo vim index.html
+	<html>
+		<head>
+			<title> Savan Prajapati </title>
+		</head>
+
+		<body>
+			<h1> Hello From Nginx </h1>
+			<p> This is sample Nginx Webpage </p>
+		</body>
+	</html>
+5. View file content: cat index.html
+6. Update nginx.conf file: sudo vim nginx.conf
+	events {
+
+	}
+	http {
+		server {
+			listen 80;
+			server_name _;
+
+			root /etc/nginx/website; # complete path of the dir containing index.html
+		}
+	}
+7. View file content: cat nginx.conf
+8: Test nginx config: sudo nginx -t
+9. Reload nginx: sudo nginx -s reload
+10. http://localhost:80
+
+--------------------------------------------------------------------------------------------------
+
+Adding style.css:
+=================
+1. Create css file into website dir: sudo touch style.css
+2. Edit css file: sudo vim style.css
+	body {
+		background-color: #ff0000;
+	}
+3. View file content: cat style.css
+4. Update index.html: sudo vim index.html
+	<html>
+		<head>
+			<link rel="stylesheet" href="style.css" />
+			<title> Savan Prajapati </title>
+		</head>
+
+		<body>
+			<h1> Hello From Nginx </h1>
+			<p> This is sample Nginx Webpage </p>
+		</body>
+	</html>
+5. View file content: cat index.html
+6. Reload nginx: sudo nginx -s reload
+7. http://localhost:80
+
+--------------------------------------------------------------------------------------------------
+
+Setting content-type:
+=====================
+
+if you check content-type on postman you will get:
+--------------------------------------------------
+	text/html:http://localhost:80
+	text/plain: http://localhost:80/style.css but it is a text/css.
+	
+	How to resolve it?
+	------------------
+	1. Manually write content-type in types section, but then for each new type everytime you have to mention here.
+		events {
+
+		}
+		http {
+			types {
+				text/css css;
+				text/html html;
+			}
+			server {
+				listen 80;
+				server_name _;
+
+				root /etc/nginx/website;
+			}
+		}
+		-> Test nginx config: sudo nginx -t
+	     	-> Reload nginx: sudo nginx -s reload
+	     	-> Verify: 
+	         	text/html: http://localhost:80
+	         	text/css: http://localhost:80/style.css
+	
+	2. nginx already have the collection of nearly all types at '/ect/nginx/mime.types', you just need to include it.
+		events {
+
+		}
+		http {
+			include /etc/nginx/mime.types;
+		
+			server {
+				listen 80;
+				server_name _;
+
+				root /etc/nginx/website;
+			}
+		}
+		-> Test nginx config: sudo nginx -t
+	     	-> Reload nginx: sudo nginx -s reload
+	     	-> Verify: 
+	         	text/html: http://localhost:80
+	         	text/css: http://localhost:80/style.css
+	
+
+
+
+
+	
+	

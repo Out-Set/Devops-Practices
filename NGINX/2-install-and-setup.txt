@@ -1,0 +1,63 @@
+Documentation: https://docs.nginx.com/nginx/admin-guide/web-server
+
+--------------------------------------------------------------------------
+
+1. Install: sudo apt install nginx
+2. Check: nginx -v
+3. Start: nginx
+
+--------------------------------------------------------------------------
+
+Note: By default nginx runs on the port 80.
+
+If port 80 already in use: Find what is using port 80, Run one of these:
+	sudo ss -ltnp | grep :80 or sudo lsof -i :80
+	
+Common fixes:
+=============
+Case 1: Nginx already running (most common)
+   check: sudo systemctl status nginx
+   If running, do not start it again, use: sudo systemctl reload nginx
+   or restart: sudo systemctl restart nginx
+   
+Case 2: Apache is running, if you see apache2
+   sudo systemctl stop apache2
+   sudo systemctl disable apache2
+   sudo systemctl start nginx
+   
+
+Case 3: You want to keep the existing service (i.e. apache2)
+   Step 1: Edit nginx config
+	Open the default server config: sudo nano /etc/nginx/sites-available/default
+
+   Step 2: Change the listen port, find this below line
+	listen 80 default_server;
+	listen [::]:80 default_server;
+
+	Change it to:
+	listen 8080 default_server;
+	listen [::]:8080 default_server;
+
+	Do NOT touch anything else
+
+   Step 3: Save and exit (nano)
+	Press CTRL + O → Enter
+	Press CTRL + X
+
+   Step 4: Test nginx config: sudo nginx -t
+	You should see:
+	syntax is ok	
+	test is successful
+
+   Step 5: Restart nginx: sudo systemctl restart nginx
+   
+   Step 6: Verify
+	Open in browser: http://localhost:8080
+	Or via terminal: curl http://localhost:8080
+	
+   If you have multiple server blocks
+	Repeat the listen 8080 change in all server blocks that use port 80.
+	To find them: grep -R "listen 80" /etc/nginx
+	
+
+
