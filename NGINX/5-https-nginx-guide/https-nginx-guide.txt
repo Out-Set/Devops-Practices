@@ -79,11 +79,22 @@ If you drop the trailing slash on proxy_pass, the full path including /app1 gets
 
 Option 2: Subdomain-based routing (needs separate hostnames): Cleaner if each app is logically a separate service, but for local testing you'd need to fake hostnames via /etc/hosts since you don't have real DNS
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-# /etc/hosts: Then in nginx, one server block per app
-127.0.0.1 app1.local
-127.0.0.1 app2.local
-127.0.0.1 app3.local
-
+Add them into /etc/hosts: app1.local, app2.local & app3.local isn't a real domain — nothing on the internet knows about it, so your machine needs to be told locally where it points via /etc/hosts.
+    127.0.0.1 app1.local
+    127.0.0.1 app2.local
+    127.0.0.1 app3.local
+    
+    1. Check if the entry exists: $ cat /etc/hosts
+    2. Add them: $ sudo nano /etc/hosts
+    3. Ctrl + O then Enter → Saves the file
+    4. Ctrl + X → exits nano
+    5. Verify it resolves now: $ ping -c 1 app1.local or $ getent hosts app1.local
+    
+Points to note:
+---------------
+    After test reset the /etc/hosts
+    Then in nginx, one server block per app like below
+    
 server {
     listen 443 ssl;
     server_name app1.local;
@@ -134,9 +145,9 @@ server {
 
 Then access: 
 ------------
-https://app1.local
-https://app2.local
-https://app3.local
+https://app1.local/...
+https://app2.local/...
+https://app3.local/...
 
 Each app runs standalone, no context-path juggling needed.
 
@@ -198,9 +209,15 @@ Make sure your Spring Boot apps are actually running:
 
 Test your services now: 
 -----------------------
-curl -k https://localhost/app1/api/hello
-curl -k https://localhost/app2/api/hello
-curl -k https://localhost/app3/api/hello
+Option-1
+    curl -k https://localhost/app1/api/hello
+    curl -k https://localhost/app2/api/hello
+    curl -k https://localhost/app3/api/hello
+
+Option-2
+    curl -k https://app1.local/api/hello
+    curl -k https://app2.local/api/hello
+    curl -k https://app3.local/api/hello
 
 =======================================================================================================================================================================================
 
