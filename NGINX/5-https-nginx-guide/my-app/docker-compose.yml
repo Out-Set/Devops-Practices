@@ -1,0 +1,16 @@
+services:
+  spring-app:
+    build: .
+    expose:
+      - "8080"          # internal only, not exposed to host directly
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+      - "443:443"       # only nginx is exposed to your machine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - spring-app

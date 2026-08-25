@@ -1,0 +1,216 @@
+=======================================================================================================================================================================================
+
+With multiple apps behind one nginx, you've got two main approaches:
+--------------------------------------------------------------------
+    1. Path-based routing (same domain, different URL prefixes) 
+    2. Subdomain-based routing (different server_name per app). Let me show both.
+
+Setup: run each Spring Boot app on its own port:
+------------------------------------------------
+    # App 1: java -jar app1.jar --server.port=8081
+    # App 2: java -jar app2.jar --server.port=8082
+    # App 3: java -jar app3.jar --server.port=8083
+    # Or if using Docker: docker run -d -p 8081:8080 app1, -p 8082:8080 app2, -p 8083:8080 app3.
+Note: All three are plain HTTP, only reachable via localhost:808x — nginx is still the only thing exposed with HTTPS.
+
+Generate a self-signed certificate (needed for local/testing HTTPS):
+--------------------------------------------------------------------
+    $ sudo mkdir -p /etc/nginx/certs
+    $ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+   	  -keyout /etc/nginx/certs/selfsigned.key \
+  	  -out /etc/nginx/certs/selfsigned.crt \
+  	  -subj "/CN=localhost"
+
+=======================================================================================================================================================================================
+
+Option 1: Path-based routing (one domain, different paths): Good for local testing since you likely only have localhost to work with — no need for multiple domain names.
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+server {
+    listen 80;
+    server_name localhost;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name localhost;
+
+    ssl_certificate     /etc/nginx/certs/selfsigned.crt;
+    ssl_certificate_key /etc/nginx/certs/selfsigned.key;
+
+    location /app1/ {
+        proxy_pass http://localhost:8081/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /app2/ {
+        proxy_pass http://localhost:8082/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /app3/ {
+        proxy_pass http://localhost:8083/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+Then access:
+------------
+https://localhost/app1/...
+https://localhost/app2/...
+https://localhost/app3/...
+
+Important gotcha:
+-----------------
+Note the trailing slashes on both location /app1/ and proxy_pass http://localhost:8081/. 
+With the trailing slash on proxy_pass, nginx strips /app1 before forwarding — so your Spring Boot app doesn't need to know about the prefix at all. 
+If you drop the trailing slash on proxy_pass, the full path including /app1 gets forwarded, and your app would need a matching server.servlet.context-path=/app1 to handle it.
+
+=======================================================================================================================================================================================
+
+Option 2: Subdomain-based routing (needs separate hostnames): Cleaner if each app is logically a separate service, but for local testing you'd need to fake hostnames via /etc/hosts since you don't have real DNS
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# /etc/hosts: Then in nginx, one server block per app
+127.0.0.1 app1.local
+127.0.0.1 app2.local
+127.0.0.1 app3.local
+
+server {
+    listen 443 ssl;
+    server_name app1.local;
+
+    ssl_certificate     /etc/nginx/certs/selfsigned.crt;
+    ssl_certificate_key /etc/nginx/certs/selfsigned.key;
+
+    location / {
+        proxy_pass http://localhost:8081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name app2.local;
+
+    ssl_certificate     /etc/nginx/certs/selfsigned.crt;
+    ssl_certificate_key /etc/nginx/certs/selfsigned.key;
+
+    location / {
+        proxy_pass http://localhost:8082;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name app3.local;
+
+    ssl_certificate     /etc/nginx/certs/selfsigned.crt;
+    ssl_certificate_key /etc/nginx/certs/selfsigned.key;
+
+    location / {
+        proxy_pass http://localhost:8083;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+Then access: 
+------------
+https://app1.local
+https://app2.local
+https://app3.local
+
+Each app runs standalone, no context-path juggling needed.
+
+=======================================================================================================================================================================================
+
+Now ppply it: Save all server/location blocks into /etc/nginx/sites-available/<your-app-name>
+---------------------------------------------------------------------------------------------
+    1. $ sudo nano /etc/nginx/sites-available/myapp
+    2. Paste Option-1 or Option-2 server/location blocks
+    3. Ctrl + O then Enter → Saves the file
+    4. Ctrl + X → exits nano
+
+Enable this site (symlink it into sites-enabled):
+-------------------------------------------------
+    $ sudo ln -s /etc/nginx/sites-available/myapp /etc/nginx/sites-enabled/
+
+Edit nginx.conf:
+----------------
+    1. Copy below nginx.conf
+	events {
+	}
+
+	http {
+    		include /etc/nginx/mime.types;
+    		include /etc/nginx/sites-enabled/*;
+	}
+    2. $ sudo nano /etc/nginx/nginx.conf
+    3. Paste it now
+    4. Ctrl + O then Enter → Saves the file
+    5. Ctrl + X → exits nano
+
+Test the config for syntax errors: 
+----------------------------------
+    $ sudo nginx -t
+    
+Reload nginx to apply: 
+----------------------
+    $ sudo systemctl reload nginx
+    
+Or Teat, Reload and Apply: 
+--------------------------
+    $ sudo nginx -t && sudo systemctl reload nginx
+
+Next Points: 
+------------
+    Remove the default site (it can conflict on port 80/443): sudo rm /etc/nginx/sites-enabled/default
+    Only remove it from sites-enabled, not sites-available — that way it stays available if you ever want to re-enable it later, it's just not active in the meantime.
+
+=======================================================================================================================================================================================
+
+Confirm nginx is now listening on 443: 
+--------------------------------------
+    $ sudo ss -tlnp | grep -E '80|443'
+    You should now see nginx bound to both 80 and 443.
+
+Make sure your Spring Boot apps are actually running: 
+-----------------------------------------------------
+    $ sudo ss -tlnp | grep -E '8081|8082|8083'
+
+Test your services now: 
+-----------------------
+curl -k https://localhost/app1/api/hello
+curl -k https://localhost/app2/api/hello
+curl -k https://localhost/app3/api/hello
+
+=======================================================================================================================================================================================
+
+Which should you pick?
+						Path-based						Subdomain-based
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+Setup effort					Simple, one domain					Needs /etc/hosts entries locally
+App code changes				None (if trailing slashes are right)			None
+Closer to real prod (with API gateway)		Yes — common gateway pattern				Yes — common for microservices with real domains
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+=======================================================================================================================================================================================
+
